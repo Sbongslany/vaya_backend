@@ -1,0 +1,76 @@
+openapi: 3.0.3
+info:
+  title: E-Hailing Platform - Authentication API
+  version: 1.0.0
+  description: Enterprise-grade authentication, session management, and MFA API.
+servers:
+  - url: http://localhost:8080/api/v1
+    description: Local Development
+
+paths:
+  /auth/register:
+    post:
+      summary: Register a new user
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [first_name, last_name, password]
+              properties:
+                first_name: { type: string }
+                last_name: { type: string }
+                email: { type: string, format: email }
+                phone: { type: string }
+                password: { type: string, minLength: 8 }
+      responses:
+        '201': { description: Registration successful }
+        '400': { description: Invalid request }
+        '409': { description: User already exists }
+
+  /auth/login:
+    post:
+      summary: Login and receive JWT tokens
+      tags: [Authentication]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                email: { type: string, format: email }
+                phone: { type: string }
+                password: { type: string }
+                device_id: { type: string }
+      responses:
+        '200': 
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token: { type: string }
+                  refresh_token: { type: string }
+                  session_id: { type: string, format: uuid }
+
+  /auth/me:
+    get:
+      summary: Get current user profile
+      tags: [Protected]
+      security:
+        - bearerAuth: []
+      responses:
+        '200': { description: User profile }
+        '401': { description: Unauthorized }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

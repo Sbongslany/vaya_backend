@@ -13,6 +13,7 @@ import (
 	"github.com/yourorg/ehailing/backend/internal/config"
 	"github.com/yourorg/ehailing/backend/internal/http/handlers"
 	"github.com/yourorg/ehailing/backend/internal/http/middleware"
+	tripDep "github.com/yourorg/ehailing/backend/internal/trip/dependency"
 )
 
 func NewRouter(
@@ -21,6 +22,8 @@ func NewRouter(
 	redisClient *redis.Client,
 	cfg *config.Config,
 	authContainer *dependency.AuthContainer,
+	tripContainer *tripDep.TripContainer, // <-- ADD THIS LINE
+
 ) *gin.Engine {
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -146,6 +149,16 @@ func NewRouter(
 		driver.POST("/onboarding/documents", authContainer.DriverHandler.SubmitDocument)
 	}
 
+	// Trip Routes (protected)
+	trips := engine.Group("/api/v1/trips")
+	trips.Use(authContainer.Middleware.Authenticate())
+	{
+		trips.POST("", tripContainer.Handler.CreateTrip)
+		trips.GET("/nearby", tripContainer.Handler.GetNearbyTrips)
+		trips.GET("/:id", tripContainer.Handler.GetTrip)
+		trips.POST("/:id/offers", tripContainer.Handler.SubmitTripOffer)
+		trips.GET("/:id/offers", tripContainer.Handler.GetTripOffers)
+	}
 	// ==========================================
 	// OPENAPI DOCUMENTATION (Only registered once)
 	// ==========================================

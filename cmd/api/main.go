@@ -19,6 +19,7 @@ import (
 	"github.com/yourorg/ehailing/backend/internal/database"
 	httpapi "github.com/yourorg/ehailing/backend/internal/httpapi"
 	"github.com/yourorg/ehailing/backend/internal/logger"
+	tripDep "github.com/yourorg/ehailing/backend/internal/trip/dependency"
 	"github.com/yourorg/ehailing/backend/migrations"
 )
 
@@ -80,6 +81,8 @@ func main() {
 	// Wire authentication dependencies.
 	authContainer := dependency.WireAuth(pgPool, redisClient, cfg, log)
 
+	tripContainer := tripDep.WireTrip(pgPool)
+
 	// Create HTTP router.
 	engine := httpapi.NewRouter(
 		log,
@@ -87,6 +90,7 @@ func main() {
 		redisClient,
 		cfg,
 		authContainer,
+		tripContainer, // <-- ADD THIS LINE
 	)
 
 	// Configure HTTP server.

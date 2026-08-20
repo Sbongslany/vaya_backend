@@ -160,6 +160,9 @@ func NewRouter(
 		trips.GET("/:id/offers", tripContainer.Handler.GetTripOffers)
 		trips.POST("/:id/offers/:offerId/accept", tripContainer.Handler.AcceptTripOffer)
 		trips.POST("/:id/confirm", tripContainer.Handler.ConfirmTripAssignment)
+		trips.POST("/:id/arrive", tripContainer.Handler.ArriveAtPickup)
+		trips.POST("/:id/start", tripContainer.Handler.StartTrip)
+		trips.POST("/:id/complete", tripContainer.Handler.CompleteTrip)
 	}
 	// ==========================================
 	// OPENAPI DOCUMENTATION (Only registered once)

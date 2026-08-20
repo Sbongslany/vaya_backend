@@ -2,18 +2,19 @@ package entities
 
 import (
 	"time"
+
 	"github.com/google/uuid"
 )
 
-// --- ENUMS & CONSTANTS ---
-
 type TripType string
+
 const (
 	TripTypeNormal       TripType = "NORMAL"
 	TripTypeLongDistance TripType = "LONG_DISTANCE"
 )
 
 type TripStatus string
+
 const (
 	StatusRequested          TripStatus = "REQUESTED"
 	StatusSearchingDrivers   TripStatus = "SEARCHING_DRIVERS"
@@ -37,20 +38,20 @@ const (
 )
 
 type OfferType string
+
 const (
 	OfferTypeNormalFare OfferType = "NORMAL_FARE"
 	OfferTypeOffer      OfferType = "OFFER"
 )
 
 type OfferStatus string
+
 const (
 	OfferStatusPending  OfferStatus = "PENDING"
 	OfferStatusAccepted OfferStatus = "ACCEPTED"
 	OfferStatusRejected OfferStatus = "REJECTED"
 	OfferStatusExpired  OfferStatus = "EXPIRED"
 )
-
-// --- ENTITIES ---
 
 type Trip struct {
 	ID               uuid.UUID
@@ -59,6 +60,7 @@ type Trip struct {
 	VehicleID        *uuid.UUID
 	TripType         TripType
 	Status           TripStatus
+	StartPIN         string
 	PickupLatitude   float64
 	PickupLongitude  float64
 	PickupAddress    string

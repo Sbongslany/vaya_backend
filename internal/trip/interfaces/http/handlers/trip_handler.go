@@ -21,6 +21,9 @@ type TripHandler struct {
 	getTripOffers         *usecases.GetTripOffers
 	acceptTripOffer       *usecases.AcceptTripOffer
 	confirmTripAssignment *usecases.ConfirmTripAssignment
+	arriveAtPickup        *usecases.ArriveAtPickup
+	startTrip             *usecases.StartTrip
+	completeTrip          *usecases.CompleteTrip
 }
 
 func NewTripHandler(
@@ -31,6 +34,9 @@ func NewTripHandler(
 	getTripOffers *usecases.GetTripOffers,
 	acceptTripOffer *usecases.AcceptTripOffer,
 	confirmTripAssignment *usecases.ConfirmTripAssignment,
+	arriveAtPickup *usecases.ArriveAtPickup,
+	startTrip *usecases.StartTrip,
+	completeTrip *usecases.CompleteTrip,
 ) *TripHandler {
 	return &TripHandler{
 		createTrip:            createTrip,
@@ -40,6 +46,9 @@ func NewTripHandler(
 		getTripOffers:         getTripOffers,
 		acceptTripOffer:       acceptTripOffer,
 		confirmTripAssignment: confirmTripAssignment,
+		arriveAtPickup:        arriveAtPickup,
+		startTrip:             startTrip,
+		completeTrip:          completeTrip,
 	}
 }
 
@@ -270,6 +279,107 @@ func (h *TripHandler) ConfirmTripAssignment(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"trip": trip})
 }
 
+func (h *TripHandler) ArriveAtPickup(c *gin.Context) {
+	userIDStr, exists := c.Get(authMiddleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	driverID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	tripID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_trip_id"})
+		return
+	}
+
+	trip, err := h.arriveAtPickup.Execute(c.Request.Context(), usecases.ArriveAtPickupInput{
+		TripID:   tripID,
+		DriverID: driverID,
+	})
+	if err != nil {
+		handleTripError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"trip": trip})
+}
+
+type StartTripRequest struct {
+	PIN string `json:"pin" binding:"required"`
+}
+
+func (h *TripHandler) StartTrip(c *gin.Context) {
+	userIDStr, exists := c.Get(authMiddleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	driverID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	tripID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_trip_id"})
+		return
+	}
+
+	var req StartTripRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "details": err.Error()})
+		return
+	}
+
+	trip, err := h.startTrip.Execute(c.Request.Context(), usecases.StartTripInput{
+		TripID:   tripID,
+		DriverID: driverID,
+		PIN:      req.PIN,
+	})
+	if err != nil {
+		handleTripError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"trip": trip})
+}
+
+func (h *TripHandler) CompleteTrip(c *gin.Context) {
+	userIDStr, exists := c.Get(authMiddleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	driverID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	tripID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_trip_id"})
+		return
+	}
+
+	trip, err := h.completeTrip.Execute(c.Request.Context(), usecases.CompleteTripInput{
+		TripID:   tripID,
+		DriverID: driverID,
+	})
+	if err != nil {
+		handleTripError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"trip": trip})
+}
+
 func handleTripError(c *gin.Context, err error) {
 	switch err {
 	case domain.ErrTripNotFound:
@@ -286,6 +396,8 @@ func handleTripError(c *gin.Context, err error) {
 		c.JSON(http.StatusConflict, gin.H{"error": "active_trip_exists"})
 	case domain.ErrUnauthorized:
 		c.JSON(http.StatusForbidden, gin.H{"error": "unauthorized"})
+	case domain.ErrInvalidPIN:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_pin"})
 	default:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_server_error"})
 	}

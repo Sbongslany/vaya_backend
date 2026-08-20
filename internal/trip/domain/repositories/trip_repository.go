@@ -12,6 +12,7 @@ type TripRepository interface {
 	Create(ctx context.Context, trip *entities.Trip) error
 	GetByID(ctx context.Context, id uuid.UUID) (*entities.Trip, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status entities.TripStatus) error
+	UpdateStatusAndFinalFare(ctx context.Context, id uuid.UUID, status entities.TripStatus, finalFare float64) error
 	FindNearbyRequested(ctx context.Context, lat, lng, radiusKM float64, limit int) ([]*entities.Trip, error)
 	FindActiveByPassengerID(ctx context.Context, passengerID uuid.UUID) (*entities.Trip, error)
 	AssignDriver(ctx context.Context, tripID, driverID uuid.UUID, status entities.TripStatus) error

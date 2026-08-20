@@ -16,7 +16,7 @@ type rowScanner interface {
 	Scan(dest ...any) error
 }
 
-const tripColumns = `id, passenger_id, driver_id, vehicle_id, trip_type, status,
+const tripColumns = `id, passenger_id, driver_id, vehicle_id, trip_type, status, start_pin,
 	pickup_latitude, pickup_longitude, pickup_address,
 	dropoff_latitude, dropoff_longitude, dropoff_address,
 	estimated_fare, final_fare, currency, distance_km,
@@ -25,7 +25,7 @@ const tripColumns = `id, passenger_id, driver_id, vehicle_id, trip_type, status,
 func scanTrip(rs rowScanner) (*entities.Trip, error) {
 	t := &entities.Trip{}
 	if err := rs.Scan(
-		&t.ID, &t.PassengerID, &t.DriverID, &t.VehicleID, &t.TripType, &t.Status,
+		&t.ID, &t.PassengerID, &t.DriverID, &t.VehicleID, &t.TripType, &t.Status, &t.StartPIN,
 		&t.PickupLatitude, &t.PickupLongitude, &t.PickupAddress,
 		&t.DropoffLatitude, &t.DropoffLongitude, &t.DropoffAddress,
 		&t.EstimatedFare, &t.FinalFare, &t.Currency, &t.DistanceKM,
@@ -46,10 +46,10 @@ func NewTripRepository(pool *pgxpool.Pool) *TripRepository {
 
 func (r *TripRepository) Create(ctx context.Context, trip *entities.Trip) error {
 	query := `INSERT INTO trips (` + tripColumns + `)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`
 
 	_, err := r.pool.Exec(ctx, query,
-		trip.ID, trip.PassengerID, trip.DriverID, trip.VehicleID, trip.TripType, trip.Status,
+		trip.ID, trip.PassengerID, trip.DriverID, trip.VehicleID, trip.TripType, trip.Status, trip.StartPIN,
 		trip.PickupLatitude, trip.PickupLongitude, trip.PickupAddress,
 		trip.DropoffLatitude, trip.DropoffLongitude, trip.DropoffAddress,
 		trip.EstimatedFare, trip.FinalFare, trip.Currency, trip.DistanceKM,
@@ -74,6 +74,12 @@ func (r *TripRepository) GetByID(ctx context.Context, id uuid.UUID) (*entities.T
 func (r *TripRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status entities.TripStatus) error {
 	query := `UPDATE trips SET status = $1, updated_at = NOW() WHERE id = $2`
 	_, err := r.pool.Exec(ctx, query, status, id)
+	return err
+}
+
+func (r *TripRepository) UpdateStatusAndFinalFare(ctx context.Context, id uuid.UUID, status entities.TripStatus, finalFare float64) error {
+	query := `UPDATE trips SET status = $1, final_fare = $2, updated_at = NOW() WHERE id = $3`
+	_, err := r.pool.Exec(ctx, query, status, finalFare, id)
 	return err
 }
 

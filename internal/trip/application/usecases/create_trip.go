@@ -2,6 +2,9 @@ package usecases
 
 import (
 	"context"
+	"crypto/rand"
+	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/google/uuid"
@@ -42,7 +45,6 @@ func (uc *CreateTrip) Execute(ctx context.Context, input CreateTripInput) (*enti
 		return nil, err
 	}
 
-	// Prevent duplicate active trips
 	activeTrip, err := uc.tripRepo.FindActiveByPassengerID(ctx, input.PassengerID)
 	if err != nil {
 		return nil, err
@@ -65,6 +67,7 @@ func (uc *CreateTrip) Execute(ctx context.Context, input CreateTripInput) (*enti
 		PassengerID:      input.PassengerID,
 		TripType:         entities.TripTypeNormal,
 		Status:           entities.StatusRequested,
+		StartPIN:         generatePIN(),
 		PickupLatitude:   input.PickupLatitude,
 		PickupLongitude:  input.PickupLongitude,
 		PickupAddress:    input.PickupAddress,
@@ -90,4 +93,12 @@ func validateCoordinates(lat, lng float64) error {
 		return domain.ErrInvalidCoordinates
 	}
 	return nil
+}
+
+func generatePIN() string {
+	n, err := rand.Int(rand.Reader, big.NewInt(10000))
+	if err != nil {
+		return "0000"
+	}
+	return fmt.Sprintf("%04d", n.Int64())
 }

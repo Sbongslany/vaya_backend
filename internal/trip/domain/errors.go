@@ -10,4 +10,5 @@ var (
 	ErrInvalidCoordinates     = errors.New("invalid_coordinates")
 	ErrActiveTripExists       = errors.New("active_trip_exists")
 	ErrInvalidOfferFare       = errors.New("invalid_offer_fare")
+	ErrInvalidPIN             = errors.New("invalid_pin")
 )

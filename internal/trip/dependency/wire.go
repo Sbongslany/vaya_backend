@@ -30,6 +30,9 @@ func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
 	getOffersUC := usecases.NewGetTripOffers(tripRepo, tripOfferRepo)
 	acceptOfferUC := usecases.NewAcceptTripOffer(tripRepo, tripOfferRepo, stateMachine)
 	confirmAssignmentUC := usecases.NewConfirmTripAssignment(tripRepo, stateMachine)
+	arriveAtPickupUC := usecases.NewArriveAtPickup(tripRepo, stateMachine)
+	startTripUC := usecases.NewStartTrip(tripRepo, stateMachine)
+	completeTripUC := usecases.NewCompleteTrip(tripRepo, stateMachine)
 
 	// Handler
 	handler := handlers.NewTripHandler(
@@ -40,6 +43,9 @@ func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
 		getOffersUC,
 		acceptOfferUC,
 		confirmAssignmentUC,
+		arriveAtPickupUC,
+		startTripUC,
+		completeTripUC,
 	)
 
 	return &TripContainer{

@@ -46,8 +46,10 @@ func (uc *SubmitTripOffer) Execute(ctx context.Context, input SubmitTripOfferInp
 		return nil, domain.ErrTripNotFound
 	}
 
-	// Only allow offers on REQUESTED or OFFERS_RECEIVED trips
-	if trip.Status != entities.StatusRequested && trip.Status != entities.StatusOffersReceived {
+	// Allow offers on REQUESTED (normal), SEARCHING_DRIVERS (long-distance), or OFFERS_RECEIVED trips
+	if trip.Status != entities.StatusRequested &&
+		trip.Status != entities.StatusSearchingDrivers &&
+		trip.Status != entities.StatusOffersReceived {
 		return nil, domain.ErrInvalidStateTransition
 	}
 
@@ -56,9 +58,9 @@ func (uc *SubmitTripOffer) Execute(ctx context.Context, input SubmitTripOfferInp
 	}
 
 	// Transition to OFFERS_RECEIVED on first offer
-	if trip.Status == entities.StatusRequested {
+	if trip.Status == entities.StatusRequested || trip.Status == entities.StatusSearchingDrivers {
 		if err := uc.stateMachine.Transition(trip.Status, entities.StatusOffersReceived); err != nil {
-			return nil, err
+			return nil, domain.ErrInvalidStateTransition
 		}
 		if err := uc.tripRepo.UpdateStatus(ctx, trip.ID, entities.StatusOffersReceived); err != nil {
 			return nil, err

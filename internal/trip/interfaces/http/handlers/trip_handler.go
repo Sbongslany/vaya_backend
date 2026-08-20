@@ -15,20 +15,27 @@ import (
 )
 
 type TripHandler struct {
-	createTrip               *usecases.CreateTrip
-	getTrip                  *usecases.GetTrip
-	getNearbyTrips           *usecases.GetNearbyTrips
-	submitTripOffer          *usecases.SubmitTripOffer
-	getTripOffers            *usecases.GetTripOffers
-	acceptTripOffer          *usecases.AcceptTripOffer
-	confirmTripAssignment    *usecases.ConfirmTripAssignment
-	arriveAtPickup           *usecases.ArriveAtPickup
-	startTrip                *usecases.StartTrip
-	completeTrip             *usecases.CompleteTrip
-	processPayment           *usecases.ProcessPayment
-	submitRating             *usecases.SubmitRating
-	createLongDistanceTrip   *usecases.CreateLongDistanceTrip
-	getOpenLongDistanceTrips *usecases.GetOpenLongDistanceTrips
+	createTrip                    *usecases.CreateTrip
+	getTrip                       *usecases.GetTrip
+	getNearbyTrips                *usecases.GetNearbyTrips
+	submitTripOffer               *usecases.SubmitTripOffer
+	getTripOffers                 *usecases.GetTripOffers
+	acceptTripOffer               *usecases.AcceptTripOffer
+	confirmTripAssignment         *usecases.ConfirmTripAssignment
+	arriveAtPickup                *usecases.ArriveAtPickup
+	startTrip                     *usecases.StartTrip
+	completeTrip                  *usecases.CompleteTrip
+	processPayment                *usecases.ProcessPayment
+	submitRating                  *usecases.SubmitRating
+	createLongDistanceTrip        *usecases.CreateLongDistanceTrip
+	getOpenLongDistanceTrips      *usecases.GetOpenLongDistanceTrips
+	publishLongDistanceTrip       *usecases.PublishLongDistanceTrip
+	confirmLongDistanceAssignment *usecases.ConfirmLongDistanceAssignment
+	scheduleLongDistanceTrip      *usecases.ScheduleLongDistanceTrip
+	departForPickup               *usecases.DepartForPickup
+	beginOutbound                 *usecases.BeginOutbound
+	reachOutboundDestination      *usecases.ReachOutboundDestination
+	resolveOutboundArrival        *usecases.ResolveOutboundArrival
 }
 
 func NewTripHandler(
@@ -46,22 +53,36 @@ func NewTripHandler(
 	submitRating *usecases.SubmitRating,
 	createLongDistanceTrip *usecases.CreateLongDistanceTrip,
 	getOpenLongDistanceTrips *usecases.GetOpenLongDistanceTrips,
+	publishLongDistanceTrip *usecases.PublishLongDistanceTrip,
+	confirmLongDistanceAssignment *usecases.ConfirmLongDistanceAssignment,
+	scheduleLongDistanceTrip *usecases.ScheduleLongDistanceTrip,
+	departForPickup *usecases.DepartForPickup,
+	beginOutbound *usecases.BeginOutbound,
+	reachOutboundDestination *usecases.ReachOutboundDestination,
+	resolveOutboundArrival *usecases.ResolveOutboundArrival,
 ) *TripHandler {
 	return &TripHandler{
-		createTrip:               createTrip,
-		getTrip:                  getTrip,
-		getNearbyTrips:           getNearbyTrips,
-		submitTripOffer:          submitTripOffer,
-		getTripOffers:            getTripOffers,
-		acceptTripOffer:          acceptTripOffer,
-		confirmTripAssignment:    confirmTripAssignment,
-		arriveAtPickup:           arriveAtPickup,
-		startTrip:                startTrip,
-		completeTrip:             completeTrip,
-		processPayment:           processPayment,
-		submitRating:             submitRating,
-		createLongDistanceTrip:   createLongDistanceTrip,
-		getOpenLongDistanceTrips: getOpenLongDistanceTrips,
+		createTrip:                    createTrip,
+		getTrip:                       getTrip,
+		getNearbyTrips:                getNearbyTrips,
+		submitTripOffer:               submitTripOffer,
+		getTripOffers:                 getTripOffers,
+		acceptTripOffer:               acceptTripOffer,
+		confirmTripAssignment:         confirmTripAssignment,
+		arriveAtPickup:                arriveAtPickup,
+		startTrip:                     startTrip,
+		completeTrip:                  completeTrip,
+		processPayment:                processPayment,
+		submitRating:                  submitRating,
+		createLongDistanceTrip:        createLongDistanceTrip,
+		getOpenLongDistanceTrips:      getOpenLongDistanceTrips,
+		publishLongDistanceTrip:       publishLongDistanceTrip,
+		confirmLongDistanceAssignment: confirmLongDistanceAssignment,
+		scheduleLongDistanceTrip:      scheduleLongDistanceTrip,
+		departForPickup:               departForPickup,
+		beginOutbound:                 beginOutbound,
+		reachOutboundDestination:      reachOutboundDestination,
+		resolveOutboundArrival:        resolveOutboundArrival,
 	}
 }
 
@@ -544,6 +565,216 @@ func (h *TripHandler) GetOpenLongDistanceTrips(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"trips": trips})
+}
+
+func (h *TripHandler) PublishLongDistanceTrip(c *gin.Context) {
+	userIDStr, exists := c.Get(authMiddleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	passengerID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	tripID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_trip_id"})
+		return
+	}
+
+	trip, err := h.publishLongDistanceTrip.Execute(c.Request.Context(), usecases.PublishLongDistanceTripInput{
+		TripID:      tripID,
+		PassengerID: passengerID,
+	})
+	if err != nil {
+		handleTripError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"trip": trip})
+}
+
+func (h *TripHandler) ConfirmLongDistanceAssignment(c *gin.Context) {
+	userIDStr, exists := c.Get(authMiddleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	driverID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	tripID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_trip_id"})
+		return
+	}
+
+	trip, err := h.confirmLongDistanceAssignment.Execute(c.Request.Context(), usecases.ConfirmLongDistanceAssignmentInput{
+		TripID:   tripID,
+		DriverID: driverID,
+	})
+	if err != nil {
+		handleTripError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"trip": trip})
+}
+
+func (h *TripHandler) ScheduleLongDistanceTrip(c *gin.Context) {
+	userIDStr, exists := c.Get(authMiddleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	passengerID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	tripID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_trip_id"})
+		return
+	}
+
+	trip, err := h.scheduleLongDistanceTrip.Execute(c.Request.Context(), usecases.ScheduleLongDistanceTripInput{
+		TripID:      tripID,
+		PassengerID: passengerID,
+	})
+	if err != nil {
+		handleTripError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"trip": trip})
+}
+
+func (h *TripHandler) DepartForPickup(c *gin.Context) {
+	userIDStr, exists := c.Get(authMiddleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	driverID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	tripID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_trip_id"})
+		return
+	}
+
+	trip, err := h.departForPickup.Execute(c.Request.Context(), usecases.DepartForPickupInput{
+		TripID:   tripID,
+		DriverID: driverID,
+	})
+	if err != nil {
+		handleTripError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"trip": trip})
+}
+
+func (h *TripHandler) BeginOutbound(c *gin.Context) {
+	userIDStr, exists := c.Get(authMiddleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	driverID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	tripID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_trip_id"})
+		return
+	}
+
+	trip, err := h.beginOutbound.Execute(c.Request.Context(), usecases.BeginOutboundInput{
+		TripID:   tripID,
+		DriverID: driverID,
+	})
+	if err != nil {
+		handleTripError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"trip": trip})
+}
+
+func (h *TripHandler) ReachOutboundDestination(c *gin.Context) {
+	userIDStr, exists := c.Get(authMiddleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	driverID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	tripID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_trip_id"})
+		return
+	}
+
+	trip, err := h.reachOutboundDestination.Execute(c.Request.Context(), usecases.ReachOutboundDestinationInput{
+		TripID:   tripID,
+		DriverID: driverID,
+	})
+	if err != nil {
+		handleTripError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"trip": trip})
+}
+
+func (h *TripHandler) ResolveOutboundArrival(c *gin.Context) {
+	userIDStr, exists := c.Get(authMiddleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	driverID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	tripID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_trip_id"})
+		return
+	}
+
+	trip, err := h.resolveOutboundArrival.Execute(c.Request.Context(), usecases.ResolveOutboundArrivalInput{
+		TripID:   tripID,
+		DriverID: driverID,
+	})
+	if err != nil {
+		handleTripError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"trip": trip})
 }
 
 func handleTripError(c *gin.Context, err error) {

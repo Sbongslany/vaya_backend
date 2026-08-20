@@ -18,7 +18,7 @@ var ValidTransitions = map[entities.TripStatus][]entities.TripStatus{
 	entities.StatusOffersReceived:    {entities.StatusDriverAssigned, entities.StatusDriverSelected, entities.StatusCancelledByPassenger, entities.StatusCancelledBySystem},
 	entities.StatusDriverAssigned:    {entities.StatusDriverEnRoute, entities.StatusCancelledByPassenger, entities.StatusCancelledByDriver, entities.StatusCancelledBySystem},
 	entities.StatusDriverEnRoute:     {entities.StatusDriverArrived, entities.StatusCancelledByPassenger, entities.StatusCancelledByDriver, entities.StatusCancelledBySystem},
-	entities.StatusDriverArrived:     {entities.StatusTripStartPending, entities.StatusTripInProgress, entities.StatusCancelledByPassenger, entities.StatusCancelledByDriver},
+	entities.StatusDriverArrived:     {entities.StatusTripStartPending, entities.StatusTripInProgress, entities.StatusTripStarted, entities.StatusCancelledByPassenger, entities.StatusCancelledByDriver},
 	entities.StatusTripStartPending:  {entities.StatusTripStarted, entities.StatusTripInProgress},
 	entities.StatusTripStarted:       {entities.StatusTripInProgress, entities.StatusOutboundInProgress},
 	entities.StatusTripInProgress:    {entities.StatusArrivedAtDest, entities.StatusTripCompleted},

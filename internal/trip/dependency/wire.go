@@ -41,6 +41,13 @@ func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
 	submitRatingUC := usecases.NewSubmitRating(tripRepo, ratingRepo, stateMachine)
 	createLongDistanceUC := usecases.NewCreateLongDistanceTrip(tripRepo, fareCalc)
 	getOpenLongDistanceUC := usecases.NewGetOpenLongDistanceTrips(tripRepo)
+	publishLongDistanceUC := usecases.NewPublishLongDistanceTrip(tripRepo, stateMachine)
+	confirmLongDistanceUC := usecases.NewConfirmLongDistanceAssignment(tripRepo, stateMachine)
+	scheduleLongDistanceUC := usecases.NewScheduleLongDistanceTrip(tripRepo, stateMachine)
+	departForPickupUC := usecases.NewDepartForPickup(tripRepo, stateMachine)
+	beginOutboundUC := usecases.NewBeginOutbound(tripRepo, stateMachine)
+	reachOutboundUC := usecases.NewReachOutboundDestination(tripRepo, stateMachine)
+	resolveOutboundUC := usecases.NewResolveOutboundArrival(tripRepo, stateMachine)
 
 	// Handler
 	handler := handlers.NewTripHandler(
@@ -58,6 +65,13 @@ func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
 		submitRatingUC,
 		createLongDistanceUC,
 		getOpenLongDistanceUC,
+		publishLongDistanceUC,
+		confirmLongDistanceUC,
+		scheduleLongDistanceUC,
+		departForPickupUC,
+		beginOutboundUC,
+		reachOutboundUC,
+		resolveOutboundUC,
 	)
 
 	return &TripContainer{

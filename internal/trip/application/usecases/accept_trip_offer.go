@@ -36,7 +36,6 @@ func NewAcceptTripOffer(
 }
 
 func (uc *AcceptTripOffer) Execute(ctx context.Context, input AcceptTripOfferInput) (*entities.Trip, error) {
-	// 1. Get the trip
 	trip, err := uc.tripRepo.GetByID(ctx, input.TripID)
 	if err != nil {
 		return nil, err
@@ -45,17 +44,20 @@ func (uc *AcceptTripOffer) Execute(ctx context.Context, input AcceptTripOfferInp
 		return nil, domain.ErrTripNotFound
 	}
 
-	// 2. Verify passenger owns this trip
 	if trip.PassengerID != input.PassengerID {
 		return nil, domain.ErrUnauthorized
 	}
 
-	// 3. Validate state transition
-	if err := uc.stateMachine.Transition(trip.Status, entities.StatusDriverAssigned); err != nil {
+	// Long-distance trips go to DRIVER_SELECTED (driver must confirm); normal trips go to DRIVER_ASSIGNED
+	targetStatus := entities.StatusDriverAssigned
+	if trip.TripType == entities.TripTypeLongDistance {
+		targetStatus = entities.StatusDriverSelected
+	}
+
+	if err := uc.stateMachine.Transition(trip.Status, targetStatus); err != nil {
 		return nil, domain.ErrInvalidStateTransition
 	}
 
-	// 4. Get the offer
 	offer, err := uc.tripOfferRepo.GetByID(ctx, input.OfferID)
 	if err != nil {
 		return nil, err
@@ -63,8 +65,6 @@ func (uc *AcceptTripOffer) Execute(ctx context.Context, input AcceptTripOfferInp
 	if offer == nil {
 		return nil, domain.ErrOfferNotFound
 	}
-
-	// 5. Verify offer belongs to this trip and is still pending
 	if offer.TripID != input.TripID {
 		return nil, domain.ErrOfferNotFound
 	}
@@ -72,22 +72,19 @@ func (uc *AcceptTripOffer) Execute(ctx context.Context, input AcceptTripOfferInp
 		return nil, domain.ErrInvalidStateTransition
 	}
 
-	// 6. Assign driver to trip (most critical operation first)
-	if err := uc.tripRepo.AssignDriver(ctx, input.TripID, offer.DriverID, entities.StatusDriverAssigned); err != nil {
+	if err := uc.tripRepo.AssignDriver(ctx, input.TripID, offer.DriverID, targetStatus); err != nil {
 		return nil, err
 	}
 
-	// 7. Mark offer as accepted
 	if err := uc.tripOfferRepo.UpdateStatus(ctx, offer.ID, entities.OfferStatusAccepted); err != nil {
 		return nil, err
 	}
 
-	// 8. Reject all other pending offers
 	if err := uc.tripOfferRepo.RejectOthersForTrip(ctx, input.TripID, offer.ID); err != nil {
 		return nil, err
 	}
 
 	trip.DriverID = &offer.DriverID
-	trip.Status = entities.StatusDriverAssigned
+	trip.Status = targetStatus
 	return trip, nil
 }

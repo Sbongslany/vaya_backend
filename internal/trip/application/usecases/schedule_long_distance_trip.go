@@ -11,28 +11,27 @@ import (
 	"github.com/yourorg/ehailing/backend/internal/trip/domain/services"
 )
 
-type StartTripInput struct {
-	TripID   uuid.UUID
-	DriverID uuid.UUID
-	PIN      string
+type ScheduleLongDistanceTripInput struct {
+	TripID      uuid.UUID
+	PassengerID uuid.UUID
 }
 
-type StartTrip struct {
+type ScheduleLongDistanceTrip struct {
 	tripRepo     repositories.TripRepository
 	stateMachine *services.StateMachine
 }
 
-func NewStartTrip(
+func NewScheduleLongDistanceTrip(
 	tripRepo repositories.TripRepository,
 	stateMachine *services.StateMachine,
-) *StartTrip {
-	return &StartTrip{
+) *ScheduleLongDistanceTrip {
+	return &ScheduleLongDistanceTrip{
 		tripRepo:     tripRepo,
 		stateMachine: stateMachine,
 	}
 }
 
-func (uc *StartTrip) Execute(ctx context.Context, input StartTripInput) (*entities.Trip, error) {
+func (uc *ScheduleLongDistanceTrip) Execute(ctx context.Context, input ScheduleLongDistanceTripInput) (*entities.Trip, error) {
 	trip, err := uc.tripRepo.GetByID(ctx, input.TripID)
 	if err != nil {
 		return nil, err
@@ -41,28 +40,18 @@ func (uc *StartTrip) Execute(ctx context.Context, input StartTripInput) (*entiti
 		return nil, domain.ErrTripNotFound
 	}
 
-	if trip.DriverID == nil || *trip.DriverID != input.DriverID {
+	if trip.PassengerID != input.PassengerID {
 		return nil, domain.ErrUnauthorized
 	}
 
-	if trip.StartPIN != input.PIN {
-		return nil, domain.ErrInvalidPIN
-	}
-
-	// Long-distance trips enter TRIP_STARTED (then outbound); normal trips enter TRIP_IN_PROGRESS
-	targetStatus := entities.StatusTripInProgress
-	if trip.TripType == entities.TripTypeLongDistance {
-		targetStatus = entities.StatusTripStarted
-	}
-
-	if err := uc.stateMachine.Transition(trip.Status, targetStatus); err != nil {
+	if err := uc.stateMachine.Transition(trip.Status, entities.StatusScheduled); err != nil {
 		return nil, domain.ErrInvalidStateTransition
 	}
 
-	if err := uc.tripRepo.UpdateStatus(ctx, trip.ID, targetStatus); err != nil {
+	if err := uc.tripRepo.UpdateStatus(ctx, trip.ID, entities.StatusScheduled); err != nil {
 		return nil, err
 	}
 
-	trip.Status = targetStatus
+	trip.Status = entities.StatusScheduled
 	return trip, nil
 }

@@ -11,28 +11,27 @@ import (
 	"github.com/yourorg/ehailing/backend/internal/trip/domain/services"
 )
 
-type StartTripInput struct {
+type ConfirmLongDistanceAssignmentInput struct {
 	TripID   uuid.UUID
 	DriverID uuid.UUID
-	PIN      string
 }
 
-type StartTrip struct {
+type ConfirmLongDistanceAssignment struct {
 	tripRepo     repositories.TripRepository
 	stateMachine *services.StateMachine
 }
 
-func NewStartTrip(
+func NewConfirmLongDistanceAssignment(
 	tripRepo repositories.TripRepository,
 	stateMachine *services.StateMachine,
-) *StartTrip {
-	return &StartTrip{
+) *ConfirmLongDistanceAssignment {
+	return &ConfirmLongDistanceAssignment{
 		tripRepo:     tripRepo,
 		stateMachine: stateMachine,
 	}
 }
 
-func (uc *StartTrip) Execute(ctx context.Context, input StartTripInput) (*entities.Trip, error) {
+func (uc *ConfirmLongDistanceAssignment) Execute(ctx context.Context, input ConfirmLongDistanceAssignmentInput) (*entities.Trip, error) {
 	trip, err := uc.tripRepo.GetByID(ctx, input.TripID)
 	if err != nil {
 		return nil, err
@@ -45,24 +44,14 @@ func (uc *StartTrip) Execute(ctx context.Context, input StartTripInput) (*entiti
 		return nil, domain.ErrUnauthorized
 	}
 
-	if trip.StartPIN != input.PIN {
-		return nil, domain.ErrInvalidPIN
-	}
-
-	// Long-distance trips enter TRIP_STARTED (then outbound); normal trips enter TRIP_IN_PROGRESS
-	targetStatus := entities.StatusTripInProgress
-	if trip.TripType == entities.TripTypeLongDistance {
-		targetStatus = entities.StatusTripStarted
-	}
-
-	if err := uc.stateMachine.Transition(trip.Status, targetStatus); err != nil {
+	if err := uc.stateMachine.Transition(trip.Status, entities.StatusDriverConfirmed); err != nil {
 		return nil, domain.ErrInvalidStateTransition
 	}
 
-	if err := uc.tripRepo.UpdateStatus(ctx, trip.ID, targetStatus); err != nil {
+	if err := uc.tripRepo.UpdateStatus(ctx, trip.ID, entities.StatusDriverConfirmed); err != nil {
 		return nil, err
 	}
 
-	trip.Status = targetStatus
+	trip.Status = entities.StatusDriverConfirmed
 	return trip, nil
 }

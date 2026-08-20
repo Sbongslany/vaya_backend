@@ -11,28 +11,27 @@ import (
 	"github.com/yourorg/ehailing/backend/internal/trip/domain/services"
 )
 
-type StartTripInput struct {
+type ReachOutboundDestinationInput struct {
 	TripID   uuid.UUID
 	DriverID uuid.UUID
-	PIN      string
 }
 
-type StartTrip struct {
+type ReachOutboundDestination struct {
 	tripRepo     repositories.TripRepository
 	stateMachine *services.StateMachine
 }
 
-func NewStartTrip(
+func NewReachOutboundDestination(
 	tripRepo repositories.TripRepository,
 	stateMachine *services.StateMachine,
-) *StartTrip {
-	return &StartTrip{
+) *ReachOutboundDestination {
+	return &ReachOutboundDestination{
 		tripRepo:     tripRepo,
 		stateMachine: stateMachine,
 	}
 }
 
-func (uc *StartTrip) Execute(ctx context.Context, input StartTripInput) (*entities.Trip, error) {
+func (uc *ReachOutboundDestination) Execute(ctx context.Context, input ReachOutboundDestinationInput) (*entities.Trip, error) {
 	trip, err := uc.tripRepo.GetByID(ctx, input.TripID)
 	if err != nil {
 		return nil, err
@@ -45,24 +44,14 @@ func (uc *StartTrip) Execute(ctx context.Context, input StartTripInput) (*entiti
 		return nil, domain.ErrUnauthorized
 	}
 
-	if trip.StartPIN != input.PIN {
-		return nil, domain.ErrInvalidPIN
-	}
-
-	// Long-distance trips enter TRIP_STARTED (then outbound); normal trips enter TRIP_IN_PROGRESS
-	targetStatus := entities.StatusTripInProgress
-	if trip.TripType == entities.TripTypeLongDistance {
-		targetStatus = entities.StatusTripStarted
-	}
-
-	if err := uc.stateMachine.Transition(trip.Status, targetStatus); err != nil {
+	if err := uc.stateMachine.Transition(trip.Status, entities.StatusDestinationReached); err != nil {
 		return nil, domain.ErrInvalidStateTransition
 	}
 
-	if err := uc.tripRepo.UpdateStatus(ctx, trip.ID, targetStatus); err != nil {
+	if err := uc.tripRepo.UpdateStatus(ctx, trip.ID, entities.StatusDestinationReached); err != nil {
 		return nil, err
 	}
 
-	trip.Status = targetStatus
+	trip.Status = entities.StatusDestinationReached
 	return trip, nil
 }

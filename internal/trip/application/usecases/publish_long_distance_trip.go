@@ -11,28 +11,27 @@ import (
 	"github.com/yourorg/ehailing/backend/internal/trip/domain/services"
 )
 
-type StartTripInput struct {
-	TripID   uuid.UUID
-	DriverID uuid.UUID
-	PIN      string
+type PublishLongDistanceTripInput struct {
+	TripID      uuid.UUID
+	PassengerID uuid.UUID
 }
 
-type StartTrip struct {
+type PublishLongDistanceTrip struct {
 	tripRepo     repositories.TripRepository
 	stateMachine *services.StateMachine
 }
 
-func NewStartTrip(
+func NewPublishLongDistanceTrip(
 	tripRepo repositories.TripRepository,
 	stateMachine *services.StateMachine,
-) *StartTrip {
-	return &StartTrip{
+) *PublishLongDistanceTrip {
+	return &PublishLongDistanceTrip{
 		tripRepo:     tripRepo,
 		stateMachine: stateMachine,
 	}
 }
 
-func (uc *StartTrip) Execute(ctx context.Context, input StartTripInput) (*entities.Trip, error) {
+func (uc *PublishLongDistanceTrip) Execute(ctx context.Context, input PublishLongDistanceTripInput) (*entities.Trip, error) {
 	trip, err := uc.tripRepo.GetByID(ctx, input.TripID)
 	if err != nil {
 		return nil, err
@@ -41,28 +40,22 @@ func (uc *StartTrip) Execute(ctx context.Context, input StartTripInput) (*entiti
 		return nil, domain.ErrTripNotFound
 	}
 
-	if trip.DriverID == nil || *trip.DriverID != input.DriverID {
+	if trip.PassengerID != input.PassengerID {
 		return nil, domain.ErrUnauthorized
 	}
 
-	if trip.StartPIN != input.PIN {
-		return nil, domain.ErrInvalidPIN
-	}
-
-	// Long-distance trips enter TRIP_STARTED (then outbound); normal trips enter TRIP_IN_PROGRESS
-	targetStatus := entities.StatusTripInProgress
-	if trip.TripType == entities.TripTypeLongDistance {
-		targetStatus = entities.StatusTripStarted
-	}
-
-	if err := uc.stateMachine.Transition(trip.Status, targetStatus); err != nil {
+	if trip.TripType != entities.TripTypeLongDistance {
 		return nil, domain.ErrInvalidStateTransition
 	}
 
-	if err := uc.tripRepo.UpdateStatus(ctx, trip.ID, targetStatus); err != nil {
+	if err := uc.stateMachine.Transition(trip.Status, entities.StatusSearchingDrivers); err != nil {
+		return nil, domain.ErrInvalidStateTransition
+	}
+
+	if err := uc.tripRepo.UpdateStatus(ctx, trip.ID, entities.StatusSearchingDrivers); err != nil {
 		return nil, err
 	}
 
-	trip.Status = targetStatus
+	trip.Status = entities.StatusSearchingDrivers
 	return trip, nil
 }

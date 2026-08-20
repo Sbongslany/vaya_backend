@@ -167,6 +167,14 @@ func NewRouter(
 		trips.POST("/:id/complete", tripContainer.Handler.CompleteTrip)
 		trips.POST("/:id/pay", tripContainer.Handler.ProcessPayment)
 		trips.POST("/:id/rate", tripContainer.Handler.SubmitRating)
+		// Long-distance execution (outbound)
+		trips.POST("/:id/long-distance/publish", tripContainer.Handler.PublishLongDistanceTrip)
+		trips.POST("/:id/long-distance/confirm", tripContainer.Handler.ConfirmLongDistanceAssignment)
+		trips.POST("/:id/long-distance/schedule", tripContainer.Handler.ScheduleLongDistanceTrip)
+		trips.POST("/:id/long-distance/depart", tripContainer.Handler.DepartForPickup)
+		trips.POST("/:id/long-distance/outbound/begin", tripContainer.Handler.BeginOutbound)
+		trips.POST("/:id/long-distance/outbound/arrive", tripContainer.Handler.ReachOutboundDestination)
+		trips.POST("/:id/long-distance/outbound/resolve", tripContainer.Handler.ResolveOutboundArrival)
 	}
 	// ==========================================
 	// OPENAPI DOCUMENTATION (Only registered once)

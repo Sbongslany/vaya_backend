@@ -7,12 +7,14 @@ import (
 	"github.com/yourorg/ehailing/backend/internal/trip/domain/services"
 	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/payment"
 	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/persistence/postgres"
+	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/websocket"
 	"github.com/yourorg/ehailing/backend/internal/trip/interfaces/http/handlers"
 )
 
 type TripContainer struct {
 	Handler      *handlers.TripHandler
 	EventHandler *handlers.TripEventHandler
+	WSHandler    *handlers.WSHandler
 }
 
 func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
@@ -27,16 +29,21 @@ func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
 	fareCalc := services.NewFareCalculator()
 	stateMachine := services.NewStateMachine()
 	paymentProvider := payment.NewDefaultPaymentProvider()
-	eventService := services.NewTripEventService(eventRepo)
+
+	// WebSocket Hub
+	hub := websocket.NewHub()
+
+	// Event service wired to broadcast to WS
+	eventService := services.NewTripEventService(eventRepo, hub)
 
 	// Use cases — normal trip
 	createTripUC := usecases.NewCreateTrip(tripRepo, fareCalc, eventService)
 	getTripUC := usecases.NewGetTrip(tripRepo)
 	getNearbyTripsUC := usecases.NewGetNearbyTrips(tripRepo)
-	submitTripOfferUC := usecases.NewSubmitTripOffer(tripRepo, tripOfferRepo, stateMachine)
-	getTripOffersUC := usecases.NewGetTripOffers(tripRepo, tripOfferRepo)
-	acceptTripOfferUC := usecases.NewAcceptTripOffer(tripRepo, tripOfferRepo, stateMachine)
-	confirmTripAssignmentUC := usecases.NewConfirmTripAssignment(tripRepo, stateMachine)
+	submitOfferUC := usecases.NewSubmitTripOffer(tripRepo, tripOfferRepo, stateMachine)
+	getOffersUC := usecases.NewGetTripOffers(tripRepo, tripOfferRepo)
+	acceptOfferUC := usecases.NewAcceptTripOffer(tripRepo, tripOfferRepo, stateMachine)
+	confirmAssignmentUC := usecases.NewConfirmTripAssignment(tripRepo, stateMachine)
 	arriveAtPickupUC := usecases.NewArriveAtPickup(tripRepo, stateMachine)
 	startTripUC := usecases.NewStartTrip(tripRepo, stateMachine)
 	completeTripUC := usecases.NewCompleteTrip(tripRepo, stateMachine)
@@ -44,20 +51,20 @@ func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
 	submitRatingUC := usecases.NewSubmitRating(tripRepo, ratingRepo, stateMachine)
 
 	// Use cases — long-distance trip
-	createLongDistanceTripUC := usecases.NewCreateLongDistanceTrip(tripRepo, fareCalc)
-	getOpenLongDistanceTripsUC := usecases.NewGetOpenLongDistanceTrips(tripRepo)
-	publishLongDistanceTripUC := usecases.NewPublishLongDistanceTrip(tripRepo, stateMachine)
-	confirmLongDistanceAssignmentUC := usecases.NewConfirmLongDistanceAssignment(tripRepo, stateMachine)
-	scheduleLongDistanceTripUC := usecases.NewScheduleLongDistanceTrip(tripRepo, stateMachine)
+	createLongDistanceUC := usecases.NewCreateLongDistanceTrip(tripRepo, fareCalc)
+	getOpenLongDistanceUC := usecases.NewGetOpenLongDistanceTrips(tripRepo)
+	publishLongDistanceUC := usecases.NewPublishLongDistanceTrip(tripRepo, stateMachine)
+	confirmLongDistanceUC := usecases.NewConfirmLongDistanceAssignment(tripRepo, stateMachine)
+	scheduleLongDistanceUC := usecases.NewScheduleLongDistanceTrip(tripRepo, stateMachine)
 	departForPickupUC := usecases.NewDepartForPickup(tripRepo, stateMachine)
 	beginOutboundUC := usecases.NewBeginOutbound(tripRepo, stateMachine)
-	reachOutboundDestinationUC := usecases.NewReachOutboundDestination(tripRepo, stateMachine)
-	resolveOutboundArrivalUC := usecases.NewResolveOutboundArrival(tripRepo, stateMachine)
+	reachOutboundUC := usecases.NewReachOutboundDestination(tripRepo, stateMachine)
+	resolveOutboundUC := usecases.NewResolveOutboundArrival(tripRepo, stateMachine)
 	scheduleReturnUC := usecases.NewScheduleReturn(tripRepo, stateMachine)
 	startReturnUC := usecases.NewStartReturn(tripRepo, stateMachine)
-	beginReturnInProgressUC := usecases.NewBeginReturnInProgress(tripRepo, stateMachine)
-	reachFinalDestinationUC := usecases.NewReachFinalDestination(tripRepo, stateMachine)
-	completeLongDistanceTripUC := usecases.NewCompleteLongDistanceTrip(tripRepo, stateMachine)
+	beginReturnUC := usecases.NewBeginReturnInProgress(tripRepo, stateMachine)
+	reachFinalUC := usecases.NewReachFinalDestination(tripRepo, stateMachine)
+	completeLongDistanceUC := usecases.NewCompleteLongDistanceTrip(tripRepo, stateMachine)
 
 	// Use cases — cancellation & events
 	cancelTripUC := usecases.NewCancelTrip(tripRepo, tripOfferRepo, stateMachine, eventService)
@@ -65,39 +72,20 @@ func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
 
 	// Handlers
 	handler := handlers.NewTripHandler(
-		createTripUC,
-		getTripUC,
-		getNearbyTripsUC,
-		submitTripOfferUC,
-		getTripOffersUC,
-		acceptTripOfferUC,
-		confirmTripAssignmentUC,
-		arriveAtPickupUC,
-		startTripUC,
-		completeTripUC,
-		processPaymentUC,
-		submitRatingUC,
-		createLongDistanceTripUC,
-		getOpenLongDistanceTripsUC,
-		publishLongDistanceTripUC,
-		confirmLongDistanceAssignmentUC,
-		scheduleLongDistanceTripUC,
-		departForPickupUC,
-		beginOutboundUC,
-		reachOutboundDestinationUC,
-		resolveOutboundArrivalUC,
-		scheduleReturnUC,
-		startReturnUC,
-		beginReturnInProgressUC,
-		reachFinalDestinationUC,
-		completeLongDistanceTripUC,
-		cancelTripUC,
+		createTripUC, getTripUC, getNearbyTripsUC, submitOfferUC, getOffersUC,
+		acceptOfferUC, confirmAssignmentUC, arriveAtPickupUC, startTripUC, completeTripUC,
+		processPaymentUC, submitRatingUC, createLongDistanceUC, getOpenLongDistanceUC,
+		publishLongDistanceUC, confirmLongDistanceUC, scheduleLongDistanceUC, departForPickupUC,
+		beginOutboundUC, reachOutboundUC, resolveOutboundUC, scheduleReturnUC, startReturnUC,
+		beginReturnUC, reachFinalUC, completeLongDistanceUC, cancelTripUC,
 	)
 
 	eventHandler := handlers.NewTripEventHandler(getTripHistoryUC)
+	wsHandler := handlers.NewWSHandler(hub)
 
 	return &TripContainer{
 		Handler:      handler,
 		EventHandler: eventHandler,
+		WSHandler:    wsHandler,
 	}
 }

@@ -12,11 +12,12 @@ import (
 )
 
 type TripEventService struct {
-	eventRepo repositories.TripEventRepository
+	eventRepo   repositories.TripEventRepository
+	broadcaster EventBroadcaster
 }
 
-func NewTripEventService(eventRepo repositories.TripEventRepository) *TripEventService {
-	return &TripEventService{eventRepo: eventRepo}
+func NewTripEventService(eventRepo repositories.TripEventRepository, broadcaster EventBroadcaster) *TripEventService {
+	return &TripEventService{eventRepo: eventRepo, broadcaster: broadcaster}
 }
 
 func (s *TripEventService) Record(
@@ -47,5 +48,14 @@ func (s *TripEventService) Record(
 		CreatedAt:  time.Now(),
 	}
 
-	return s.eventRepo.Create(ctx, event)
+	if err := s.eventRepo.Create(ctx, event); err != nil {
+		return err
+	}
+
+	// Broadcast to WebSocket clients in real-time
+	if s.broadcaster != nil {
+		s.broadcaster.Broadcast(tripID, event)
+	}
+
+	return nil
 }

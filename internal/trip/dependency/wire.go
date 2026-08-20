@@ -5,6 +5,7 @@ import (
 
 	"github.com/yourorg/ehailing/backend/internal/trip/application/usecases"
 	"github.com/yourorg/ehailing/backend/internal/trip/domain/services"
+	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/payment"
 	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/persistence/postgres"
 	"github.com/yourorg/ehailing/backend/internal/trip/interfaces/http/handlers"
 )
@@ -17,10 +18,13 @@ func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
 	// Repositories
 	tripRepo := postgres.NewTripRepository(pgPool)
 	tripOfferRepo := postgres.NewTripOfferRepository(pgPool)
+	paymentRepo := postgres.NewPaymentRepository(pgPool)
+	ratingRepo := postgres.NewTripRatingRepository(pgPool)
 
 	// Domain services
 	fareCalc := services.NewFareCalculator()
 	stateMachine := services.NewStateMachine()
+	paymentProvider := payment.NewDefaultPaymentProvider()
 
 	// Use cases
 	createTripUC := usecases.NewCreateTrip(tripRepo, fareCalc)
@@ -33,6 +37,8 @@ func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
 	arriveAtPickupUC := usecases.NewArriveAtPickup(tripRepo, stateMachine)
 	startTripUC := usecases.NewStartTrip(tripRepo, stateMachine)
 	completeTripUC := usecases.NewCompleteTrip(tripRepo, stateMachine)
+	processPaymentUC := usecases.NewProcessPayment(tripRepo, paymentRepo, paymentProvider, stateMachine)
+	submitRatingUC := usecases.NewSubmitRating(tripRepo, ratingRepo, stateMachine)
 
 	// Handler
 	handler := handlers.NewTripHandler(
@@ -46,6 +52,8 @@ func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
 		arriveAtPickupUC,
 		startTripUC,
 		completeTripUC,
+		processPaymentUC,
+		submitRatingUC,
 	)
 
 	return &TripContainer{

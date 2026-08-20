@@ -24,6 +24,8 @@ type TripHandler struct {
 	arriveAtPickup        *usecases.ArriveAtPickup
 	startTrip             *usecases.StartTrip
 	completeTrip          *usecases.CompleteTrip
+	processPayment        *usecases.ProcessPayment
+	submitRating          *usecases.SubmitRating
 }
 
 func NewTripHandler(
@@ -37,6 +39,8 @@ func NewTripHandler(
 	arriveAtPickup *usecases.ArriveAtPickup,
 	startTrip *usecases.StartTrip,
 	completeTrip *usecases.CompleteTrip,
+	processPayment *usecases.ProcessPayment,
+	submitRating *usecases.SubmitRating,
 ) *TripHandler {
 	return &TripHandler{
 		createTrip:            createTrip,
@@ -49,6 +53,8 @@ func NewTripHandler(
 		arriveAtPickup:        arriveAtPickup,
 		startTrip:             startTrip,
 		completeTrip:          completeTrip,
+		processPayment:        processPayment,
+		submitRating:          submitRating,
 	}
 }
 
@@ -380,6 +386,90 @@ func (h *TripHandler) CompleteTrip(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"trip": trip})
 }
 
+type ProcessPaymentRequest struct {
+	Method entities.PaymentMethod `json:"method" binding:"required"`
+}
+
+func (h *TripHandler) ProcessPayment(c *gin.Context) {
+	userIDStr, exists := c.Get(authMiddleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	passengerID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	tripID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_trip_id"})
+		return
+	}
+
+	var req ProcessPaymentRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "details": err.Error()})
+		return
+	}
+
+	payment, err := h.processPayment.Execute(c.Request.Context(), usecases.ProcessPaymentInput{
+		TripID:      tripID,
+		PassengerID: passengerID,
+		Method:      req.Method,
+	})
+	if err != nil {
+		handleTripError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"payment": payment})
+}
+
+type SubmitRatingRequest struct {
+	Rating  int    `json:"rating" binding:"required"`
+	Comment string `json:"comment"`
+}
+
+func (h *TripHandler) SubmitRating(c *gin.Context) {
+	userIDStr, exists := c.Get(authMiddleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	raterID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	tripID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_trip_id"})
+		return
+	}
+
+	var req SubmitRatingRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "details": err.Error()})
+		return
+	}
+
+	rating, err := h.submitRating.Execute(c.Request.Context(), usecases.SubmitRatingInput{
+		TripID:  tripID,
+		RaterID: raterID,
+		Rating:  req.Rating,
+		Comment: req.Comment,
+	})
+	if err != nil {
+		handleTripError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"rating": rating})
+}
+
 func handleTripError(c *gin.Context, err error) {
 	switch err {
 	case domain.ErrTripNotFound:
@@ -398,6 +488,14 @@ func handleTripError(c *gin.Context, err error) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "unauthorized"})
 	case domain.ErrInvalidPIN:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_pin"})
+	case domain.ErrAlreadyPaid:
+		c.JSON(http.StatusConflict, gin.H{"error": "already_paid"})
+	case domain.ErrInvalidRating:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_rating"})
+	case domain.ErrAlreadyRated:
+		c.JSON(http.StatusConflict, gin.H{"error": "already_rated"})
+	case domain.ErrNotTripParticipant:
+		c.JSON(http.StatusForbidden, gin.H{"error": "not_trip_participant"})
 	default:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_server_error"})
 	}

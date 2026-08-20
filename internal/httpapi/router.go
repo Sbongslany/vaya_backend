@@ -163,6 +163,8 @@ func NewRouter(
 		trips.POST("/:id/arrive", tripContainer.Handler.ArriveAtPickup)
 		trips.POST("/:id/start", tripContainer.Handler.StartTrip)
 		trips.POST("/:id/complete", tripContainer.Handler.CompleteTrip)
+		trips.POST("/:id/pay", tripContainer.Handler.ProcessPayment)
+		trips.POST("/:id/rate", tripContainer.Handler.SubmitRating)
 	}
 	// ==========================================
 	// OPENAPI DOCUMENTATION (Only registered once)

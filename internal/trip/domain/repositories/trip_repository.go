@@ -17,6 +17,7 @@ type TripRepository interface {
 	FindActiveByPassengerID(ctx context.Context, passengerID uuid.UUID) (*entities.Trip, error)
 	AssignDriver(ctx context.Context, tripID, driverID uuid.UUID, status entities.TripStatus) error
 	FindOpenLongDistanceTrips(ctx context.Context, limit int) ([]*entities.Trip, error)
+	Cancel(ctx context.Context, trip *entities.Trip) error
 }
 
 type TripOfferRepository interface {
@@ -25,4 +26,5 @@ type TripOfferRepository interface {
 	FindByTripID(ctx context.Context, tripID uuid.UUID) ([]*entities.TripOffer, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status entities.OfferStatus) error
 	RejectOthersForTrip(ctx context.Context, tripID, exceptOfferID uuid.UUID) error
+	ExpireAllForTrip(ctx context.Context, tripID uuid.UUID) error
 }

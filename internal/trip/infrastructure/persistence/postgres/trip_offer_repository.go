@@ -90,3 +90,13 @@ func (r *TripOfferRepository) RejectOthersForTrip(ctx context.Context, tripID, e
 	)
 	return err
 }
+
+func (r *TripOfferRepository) ExpireAllForTrip(ctx context.Context, tripID uuid.UUID) error {
+	query := `UPDATE trip_offers SET status = $1, updated_at = NOW()
+		WHERE trip_id = $2 AND status = $3`
+
+	_, err := r.pool.Exec(ctx, query,
+		entities.OfferStatusExpired, tripID, entities.OfferStatusPending,
+	)
+	return err
+}

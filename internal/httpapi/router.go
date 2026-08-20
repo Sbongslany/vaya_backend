@@ -167,6 +167,7 @@ func NewRouter(
 		trips.POST("/:id/complete", tripContainer.Handler.CompleteTrip)
 		trips.POST("/:id/pay", tripContainer.Handler.ProcessPayment)
 		trips.POST("/:id/rate", tripContainer.Handler.SubmitRating)
+		trips.POST("/:id/cancel", tripContainer.Handler.CancelTrip)
 		// Long-distance execution (outbound)
 		trips.POST("/:id/long-distance/publish", tripContainer.Handler.PublishLongDistanceTrip)
 		trips.POST("/:id/long-distance/confirm", tripContainer.Handler.ConfirmLongDistanceAssignment)
@@ -175,6 +176,13 @@ func NewRouter(
 		trips.POST("/:id/long-distance/outbound/begin", tripContainer.Handler.BeginOutbound)
 		trips.POST("/:id/long-distance/outbound/arrive", tripContainer.Handler.ReachOutboundDestination)
 		trips.POST("/:id/long-distance/outbound/resolve", tripContainer.Handler.ResolveOutboundArrival)
+		// Long-distance execution (return)
+		trips.POST("/:id/long-distance/return/schedule", tripContainer.Handler.ScheduleReturn)
+		trips.POST("/:id/long-distance/return/start", tripContainer.Handler.StartReturn)
+		trips.POST("/:id/long-distance/return/begin", tripContainer.Handler.BeginReturnInProgress)
+		trips.POST("/:id/long-distance/return/arrive", tripContainer.Handler.ReachFinalDestination)
+		trips.POST("/:id/long-distance/return/complete", tripContainer.Handler.CompleteLongDistanceTrip)
+		trips.GET("/:id/events", tripContainer.EventHandler.GetTripHistory)
 	}
 	// ==========================================
 	// OPENAPI DOCUMENTATION (Only registered once)

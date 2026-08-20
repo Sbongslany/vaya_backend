@@ -36,6 +36,12 @@ type TripHandler struct {
 	beginOutbound                 *usecases.BeginOutbound
 	reachOutboundDestination      *usecases.ReachOutboundDestination
 	resolveOutboundArrival        *usecases.ResolveOutboundArrival
+	scheduleReturn                *usecases.ScheduleReturn
+	startReturn                   *usecases.StartReturn
+	beginReturnInProgress         *usecases.BeginReturnInProgress
+	reachFinalDestination         *usecases.ReachFinalDestination
+	completeLongDistanceTrip      *usecases.CompleteLongDistanceTrip
+	cancelTrip                    *usecases.CancelTrip
 }
 
 func NewTripHandler(
@@ -60,6 +66,12 @@ func NewTripHandler(
 	beginOutbound *usecases.BeginOutbound,
 	reachOutboundDestination *usecases.ReachOutboundDestination,
 	resolveOutboundArrival *usecases.ResolveOutboundArrival,
+	scheduleReturn *usecases.ScheduleReturn,
+	startReturn *usecases.StartReturn,
+	beginReturnInProgress *usecases.BeginReturnInProgress,
+	reachFinalDestination *usecases.ReachFinalDestination,
+	completeLongDistanceTrip *usecases.CompleteLongDistanceTrip,
+	cancelTrip *usecases.CancelTrip,
 ) *TripHandler {
 	return &TripHandler{
 		createTrip:                    createTrip,
@@ -83,8 +95,18 @@ func NewTripHandler(
 		beginOutbound:                 beginOutbound,
 		reachOutboundDestination:      reachOutboundDestination,
 		resolveOutboundArrival:        resolveOutboundArrival,
+		scheduleReturn:                scheduleReturn,
+		startReturn:                   startReturn,
+		beginReturnInProgress:         beginReturnInProgress,
+		reachFinalDestination:         reachFinalDestination,
+		completeLongDistanceTrip:      completeLongDistanceTrip,
+		cancelTrip:                    cancelTrip,
 	}
 }
+
+// ==========================================
+// NORMAL TRIP HANDLERS
+// ==========================================
 
 type CreateTripRequest struct {
 	PickupLatitude   float64 `json:"pickup_latitude" binding:"required"`
@@ -187,6 +209,10 @@ func (h *TripHandler) GetNearbyTrips(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"trips": trips})
 }
 
+// ==========================================
+// OFFER HANDLERS
+// ==========================================
+
 type SubmitTripOfferRequest struct {
 	OfferType   entities.OfferType `json:"offer_type" binding:"required"`
 	OfferedFare float64            `json:"offered_fare" binding:"required"`
@@ -282,6 +308,10 @@ func (h *TripHandler) AcceptTripOffer(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"trip": trip})
 }
+
+// ==========================================
+// TRIP EXECUTION HANDLERS (NORMAL)
+// ==========================================
 
 func (h *TripHandler) ConfirmTripAssignment(c *gin.Context) {
 	userIDStr, exists := c.Get(authMiddleware.UserIDKey)
@@ -414,6 +444,10 @@ func (h *TripHandler) CompleteTrip(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"trip": trip})
 }
 
+// ==========================================
+// PAYMENT & RATING HANDLERS
+// ==========================================
+
 type ProcessPaymentRequest struct {
 	Method entities.PaymentMethod `json:"method" binding:"required"`
 }
@@ -497,6 +531,10 @@ func (h *TripHandler) SubmitRating(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, gin.H{"rating": rating})
 }
+
+// ==========================================
+// LONG-DISTANCE TRIP SETUP HANDLERS
+// ==========================================
 
 type CreateLongDistanceTripRequest struct {
 	PickupLatitude     float64                   `json:"pickup_latitude" binding:"required"`
@@ -687,6 +725,10 @@ func (h *TripHandler) DepartForPickup(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"trip": trip})
 }
 
+// ==========================================
+// LONG-DISTANCE OUTBOUND HANDLERS
+// ==========================================
+
 func (h *TripHandler) BeginOutbound(c *gin.Context) {
 	userIDStr, exists := c.Get(authMiddleware.UserIDKey)
 	if !exists {
@@ -776,6 +818,206 @@ func (h *TripHandler) ResolveOutboundArrival(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"trip": trip})
 }
+
+// ==========================================
+// LONG-DISTANCE RETURN HANDLERS
+// ==========================================
+
+func (h *TripHandler) ScheduleReturn(c *gin.Context) {
+	userIDStr, exists := c.Get(authMiddleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	driverID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	tripID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_trip_id"})
+		return
+	}
+
+	trip, err := h.scheduleReturn.Execute(c.Request.Context(), usecases.ScheduleReturnInput{
+		TripID:   tripID,
+		DriverID: driverID,
+	})
+	if err != nil {
+		handleTripError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"trip": trip})
+}
+
+func (h *TripHandler) StartReturn(c *gin.Context) {
+	userIDStr, exists := c.Get(authMiddleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	driverID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	tripID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_trip_id"})
+		return
+	}
+
+	trip, err := h.startReturn.Execute(c.Request.Context(), usecases.StartReturnInput{
+		TripID:   tripID,
+		DriverID: driverID,
+	})
+	if err != nil {
+		handleTripError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"trip": trip})
+}
+
+func (h *TripHandler) BeginReturnInProgress(c *gin.Context) {
+	userIDStr, exists := c.Get(authMiddleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	driverID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	tripID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_trip_id"})
+		return
+	}
+
+	trip, err := h.beginReturnInProgress.Execute(c.Request.Context(), usecases.BeginReturnInProgressInput{
+		TripID:   tripID,
+		DriverID: driverID,
+	})
+	if err != nil {
+		handleTripError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"trip": trip})
+}
+
+func (h *TripHandler) ReachFinalDestination(c *gin.Context) {
+	userIDStr, exists := c.Get(authMiddleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	driverID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	tripID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_trip_id"})
+		return
+	}
+
+	trip, err := h.reachFinalDestination.Execute(c.Request.Context(), usecases.ReachFinalDestinationInput{
+		TripID:   tripID,
+		DriverID: driverID,
+	})
+	if err != nil {
+		handleTripError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"trip": trip})
+}
+
+func (h *TripHandler) CompleteLongDistanceTrip(c *gin.Context) {
+	userIDStr, exists := c.Get(authMiddleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	driverID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	tripID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_trip_id"})
+		return
+	}
+
+	trip, err := h.completeLongDistanceTrip.Execute(c.Request.Context(), usecases.CompleteLongDistanceTripInput{
+		TripID:   tripID,
+		DriverID: driverID,
+	})
+	if err != nil {
+		handleTripError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"trip": trip})
+}
+
+// ==========================================
+// CANCELLATION HANDLER
+// ==========================================
+
+type CancelTripRequest struct {
+	Reason string `json:"reason"`
+}
+
+func (h *TripHandler) CancelTrip(c *gin.Context) {
+	userIDStr, exists := c.Get(authMiddleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	userID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	tripID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_trip_id"})
+		return
+	}
+
+	var req CancelTripRequest
+	c.ShouldBindJSON(&req)
+
+	trip, err := h.cancelTrip.Execute(c.Request.Context(), usecases.CancelTripInput{
+		TripID: tripID,
+		UserID: userID,
+		Reason: req.Reason,
+	})
+	if err != nil {
+		handleTripError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"trip": trip})
+}
+
+// ==========================================
+// ERROR HANDLER
+// ==========================================
 
 func handleTripError(c *gin.Context, err error) {
 	switch err {

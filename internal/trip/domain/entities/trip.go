@@ -94,6 +94,10 @@ type Trip struct {
 	ScheduledDeparture *time.Time
 	ScheduledReturn    *time.Time
 	TripDurationDays   *int
+	CancellationReason *string
+	CancelledBy        *uuid.UUID
+	CancelledAt        *time.Time
+	CancellationFee    *float64
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 }

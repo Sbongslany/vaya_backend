@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"math"
 
@@ -21,6 +22,7 @@ const tripColumns = `id, passenger_id, driver_id, vehicle_id, trip_type, status,
 	dropoff_latitude, dropoff_longitude, dropoff_address,
 	estimated_fare, final_fare, currency, distance_km,
 	long_distance_type, scheduled_departure, scheduled_return, trip_duration_days,
+	cancellation_reason, cancelled_by, cancelled_at, cancellation_fee,
 	created_at, updated_at`
 
 func scanTrip(rs rowScanner) (*entities.Trip, error) {
@@ -31,6 +33,7 @@ func scanTrip(rs rowScanner) (*entities.Trip, error) {
 		&t.DropoffLatitude, &t.DropoffLongitude, &t.DropoffAddress,
 		&t.EstimatedFare, &t.FinalFare, &t.Currency, &t.DistanceKM,
 		&t.LongDistanceType, &t.ScheduledDeparture, &t.ScheduledReturn, &t.TripDurationDays,
+		&t.CancellationReason, &t.CancelledBy, &t.CancelledAt, &t.CancellationFee,
 		&t.CreatedAt, &t.UpdatedAt,
 	); err != nil {
 		return nil, err
@@ -46,9 +49,19 @@ func NewTripRepository(pool *pgxpool.Pool) *TripRepository {
 	return &TripRepository{pool: pool}
 }
 
+// logEvent writes an entry to the trip audit trail.
+func (r *TripRepository) logEvent(ctx context.Context, tripID uuid.UUID, eventType string, actorID *uuid.UUID, fromStatus, toStatus *string, metadata json.RawMessage) error {
+	_, err := r.pool.Exec(ctx,
+		`INSERT INTO trip_events (trip_id, event_type, actor_id, from_status, to_status, metadata, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+		tripID, eventType, actorID, fromStatus, toStatus, metadata,
+	)
+	return err
+}
+
 func (r *TripRepository) Create(ctx context.Context, trip *entities.Trip) error {
 	query := `INSERT INTO trips (` + tripColumns + `)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)`
 
 	_, err := r.pool.Exec(ctx, query,
 		trip.ID, trip.PassengerID, trip.DriverID, trip.VehicleID, trip.TripType, trip.Status, trip.StartPIN,
@@ -56,9 +69,15 @@ func (r *TripRepository) Create(ctx context.Context, trip *entities.Trip) error 
 		trip.DropoffLatitude, trip.DropoffLongitude, trip.DropoffAddress,
 		trip.EstimatedFare, trip.FinalFare, trip.Currency, trip.DistanceKM,
 		trip.LongDistanceType, trip.ScheduledDeparture, trip.ScheduledReturn, trip.TripDurationDays,
+		trip.CancellationReason, trip.CancelledBy, trip.CancelledAt, trip.CancellationFee,
 		trip.CreatedAt, trip.UpdatedAt,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+
+	toStatus := string(trip.Status)
+	return r.logEvent(ctx, trip.ID, entities.EventTypeTripCreated, &trip.PassengerID, nil, &toStatus, nil)
 }
 
 func (r *TripRepository) GetByID(ctx context.Context, id uuid.UUID) (*entities.Trip, error) {
@@ -75,15 +94,41 @@ func (r *TripRepository) GetByID(ctx context.Context, id uuid.UUID) (*entities.T
 }
 
 func (r *TripRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status entities.TripStatus) error {
-	query := `UPDATE trips SET status = $1, updated_at = NOW() WHERE id = $2`
-	_, err := r.pool.Exec(ctx, query, status, id)
-	return err
+	var oldStatus string
+	err := r.pool.QueryRow(ctx, `SELECT status FROM trips WHERE id = $1`, id).Scan(&oldStatus)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return err
+	}
+
+	_, err = r.pool.Exec(ctx, `UPDATE trips SET status = $1, updated_at = NOW() WHERE id = $2`, status, id)
+	if err != nil {
+		return err
+	}
+
+	newStatus := string(status)
+	return r.logEvent(ctx, id, entities.EventTypeStatusChanged, nil, &oldStatus, &newStatus, nil)
 }
 
 func (r *TripRepository) UpdateStatusAndFinalFare(ctx context.Context, id uuid.UUID, status entities.TripStatus, finalFare float64) error {
-	query := `UPDATE trips SET status = $1, final_fare = $2, updated_at = NOW() WHERE id = $3`
-	_, err := r.pool.Exec(ctx, query, status, finalFare, id)
-	return err
+	var oldStatus string
+	err := r.pool.QueryRow(ctx, `SELECT status FROM trips WHERE id = $1`, id).Scan(&oldStatus)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return err
+	}
+
+	_, err = r.pool.Exec(ctx, `UPDATE trips SET status = $1, final_fare = $2, updated_at = NOW() WHERE id = $3`, status, finalFare, id)
+	if err != nil {
+		return err
+	}
+
+	newStatus := string(status)
+	return r.logEvent(ctx, id, entities.EventTypeStatusChanged, nil, &oldStatus, &newStatus, nil)
 }
 
 func (r *TripRepository) FindNearbyRequested(ctx context.Context, lat, lng, radiusKM float64, limit int) ([]*entities.Trip, error) {
@@ -165,9 +210,22 @@ func (r *TripRepository) FindActiveByPassengerID(ctx context.Context, passengerI
 }
 
 func (r *TripRepository) AssignDriver(ctx context.Context, tripID, driverID uuid.UUID, status entities.TripStatus) error {
-	query := `UPDATE trips SET driver_id = $1, status = $2, updated_at = NOW() WHERE id = $3`
-	_, err := r.pool.Exec(ctx, query, driverID, status, tripID)
-	return err
+	var oldStatus string
+	err := r.pool.QueryRow(ctx, `SELECT status FROM trips WHERE id = $1`, tripID).Scan(&oldStatus)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return err
+	}
+
+	_, err = r.pool.Exec(ctx, `UPDATE trips SET driver_id = $1, status = $2, updated_at = NOW() WHERE id = $3`, driverID, status, tripID)
+	if err != nil {
+		return err
+	}
+
+	newStatus := string(status)
+	return r.logEvent(ctx, tripID, entities.EventTypeDriverAssigned, &driverID, &oldStatus, &newStatus, nil)
 }
 
 func (r *TripRepository) FindOpenLongDistanceTrips(ctx context.Context, limit int) ([]*entities.Trip, error) {
@@ -198,6 +256,41 @@ func (r *TripRepository) FindOpenLongDistanceTrips(ctx context.Context, limit in
 		trips = append(trips, trip)
 	}
 	return trips, rows.Err()
+}
+
+func (r *TripRepository) Cancel(ctx context.Context, trip *entities.Trip) error {
+	var oldStatus string
+	err := r.pool.QueryRow(ctx, `SELECT status FROM trips WHERE id = $1`, trip.ID).Scan(&oldStatus)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return err
+	}
+
+	query := `UPDATE trips SET
+		status = $1,
+		cancellation_reason = $2,
+		cancelled_by = $3,
+		cancelled_at = $4,
+		cancellation_fee = $5,
+		updated_at = NOW()
+		WHERE id = $6`
+
+	_, err = r.pool.Exec(ctx, query,
+		trip.Status,
+		trip.CancellationReason,
+		trip.CancelledBy,
+		trip.CancelledAt,
+		trip.CancellationFee,
+		trip.ID,
+	)
+	if err != nil {
+		return err
+	}
+
+	newStatus := string(trip.Status)
+	return r.logEvent(ctx, trip.ID, entities.EventTypeTripCancelled, trip.CancelledBy, &oldStatus, &newStatus, nil)
 }
 
 func haversineDistanceKM(lat1, lng1, lat2, lng2 float64) float64 {

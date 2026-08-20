@@ -185,6 +185,8 @@ func NewRouter(
 		trips.GET("/:id/events", tripContainer.EventHandler.GetTripHistory)
 		trips.GET("/:id/history", tripContainer.EventHandler.GetTripHistory)
 		trips.GET("/ws", tripContainer.WSHandler.ServeWS)
+		trips.POST("/devices/token", tripContainer.DeviceHandler.RegisterToken)
+
 	}
 	// ==========================================
 	// OPENAPI DOCUMENTATION (Only registered once)

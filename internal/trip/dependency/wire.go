@@ -1,10 +1,13 @@
 package dependency
 
 import (
+	"log"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/yourorg/ehailing/backend/internal/trip/application/usecases"
 	"github.com/yourorg/ehailing/backend/internal/trip/domain/services"
+	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/notifications"
 	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/payment"
 	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/persistence/postgres"
 	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/websocket"
@@ -12,9 +15,10 @@ import (
 )
 
 type TripContainer struct {
-	Handler      *handlers.TripHandler
-	EventHandler *handlers.TripEventHandler
-	WSHandler    *handlers.WSHandler
+	Handler       *handlers.TripHandler
+	EventHandler  *handlers.TripEventHandler
+	WSHandler     *handlers.WSHandler
+	DeviceHandler *handlers.DeviceHandler
 }
 
 func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
@@ -24,6 +28,7 @@ func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
 	paymentRepo := postgres.NewPaymentRepository(pgPool)
 	ratingRepo := postgres.NewTripRatingRepository(pgPool)
 	eventRepo := postgres.NewTripEventRepository(pgPool)
+	deviceTokenRepo := postgres.NewDeviceTokenRepository(pgPool)
 
 	// Domain services
 	fareCalc := services.NewFareCalculator()
@@ -33,8 +38,16 @@ func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
 	// WebSocket Hub
 	hub := websocket.NewHub()
 
-	// Event service wired to broadcast to WS
-	eventService := services.NewTripEventService(eventRepo, hub)
+	// FCM Notification Service
+	fcmService, err := notifications.NewFirebaseNotificationService(deviceTokenRepo)
+	if err != nil {
+		log.Printf("WARNING: Firebase FCM not initialized: %v. Push notifications will be disabled.", err)
+		// We pass nil to the event service, which safely skips push notifications if FCM fails to load
+		fcmService = nil
+	}
+
+	// Event service wired to broadcast to WS AND send FCM pushes
+	eventService := services.NewTripEventService(eventRepo, tripRepo, hub, fcmService)
 
 	// Use cases — normal trip
 	createTripUC := usecases.NewCreateTrip(tripRepo, fareCalc, eventService)
@@ -66,9 +79,10 @@ func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
 	reachFinalUC := usecases.NewReachFinalDestination(tripRepo, stateMachine)
 	completeLongDistanceUC := usecases.NewCompleteLongDistanceTrip(tripRepo, stateMachine)
 
-	// Use cases — cancellation & events
+	// Use cases — cancellation, events, & devices
 	cancelTripUC := usecases.NewCancelTrip(tripRepo, tripOfferRepo, stateMachine, eventService)
 	getTripHistoryUC := usecases.NewGetTripHistory(tripRepo, eventRepo)
+	registerDeviceTokenUC := usecases.NewRegisterDeviceToken(deviceTokenRepo)
 
 	// Handlers
 	handler := handlers.NewTripHandler(
@@ -82,10 +96,12 @@ func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
 
 	eventHandler := handlers.NewTripEventHandler(getTripHistoryUC)
 	wsHandler := handlers.NewWSHandler(hub)
+	deviceHandler := handlers.NewDeviceHandler(registerDeviceTokenUC)
 
 	return &TripContainer{
-		Handler:      handler,
-		EventHandler: eventHandler,
-		WSHandler:    wsHandler,
+		Handler:       handler,
+		EventHandler:  eventHandler,
+		WSHandler:     wsHandler,
+		DeviceHandler: deviceHandler,
 	}
 }

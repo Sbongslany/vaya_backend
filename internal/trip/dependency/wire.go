@@ -5,6 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	promoDep "github.com/yourorg/ehailing/backend/internal/promotions/dependency"
 	"github.com/yourorg/ehailing/backend/internal/trip/application/usecases"
 	"github.com/yourorg/ehailing/backend/internal/trip/domain/services"
 	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/notifications"
@@ -22,7 +23,7 @@ type TripContainer struct {
 	RatingHandler *handlers.RatingHandler
 }
 
-func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
+func WireTrip(pgPool *pgxpool.Pool, promosContainer *promoDep.PromotionsContainer) *TripContainer {
 	// Repositories
 	tripRepo := postgres.NewTripRepository(pgPool)
 	tripOfferRepo := postgres.NewTripOfferRepository(pgPool)
@@ -51,7 +52,8 @@ func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
 	eventService := services.NewTripEventService(eventRepo, tripRepo, hub, fcmService)
 
 	// Use cases — normal trip
-	createTripUC := usecases.NewCreateTrip(tripRepo, fareCalc, eventService)
+	promoRedeemer := promoDep.NewPromotionRedeemerAdapter(promosContainer.RedeemUC)
+	createTripUC := usecases.NewCreateTrip(tripRepo, fareCalc, eventService, promoRedeemer)
 	getTripUC := usecases.NewGetTrip(tripRepo)
 	getNearbyTripsUC := usecases.NewGetNearbyTrips(tripRepo)
 	submitOfferUC := usecases.NewSubmitTripOffer(tripRepo, tripOfferRepo, stateMachine)

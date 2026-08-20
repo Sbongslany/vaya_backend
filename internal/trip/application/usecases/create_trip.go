@@ -23,23 +23,27 @@ type CreateTripInput struct {
 	DropoffLatitude  float64
 	DropoffLongitude float64
 	DropoffAddress   string
+	PromoCode        string // optional
 }
 
 type CreateTrip struct {
-	tripRepo     repositories.TripRepository
-	fareCalc     *services.FareCalculator
-	eventService *services.TripEventService
+	tripRepo      repositories.TripRepository
+	fareCalc      *services.FareCalculator
+	eventService  *services.TripEventService
+	promoRedeemer services.PromotionRedeemer
 }
 
 func NewCreateTrip(
 	tripRepo repositories.TripRepository,
 	fareCalc *services.FareCalculator,
 	eventService *services.TripEventService,
+	promoRedeemer services.PromotionRedeemer,
 ) *CreateTrip {
 	return &CreateTrip{
-		tripRepo:     tripRepo,
-		fareCalc:     fareCalc,
-		eventService: eventService,
+		tripRepo:      tripRepo,
+		fareCalc:      fareCalc,
+		eventService:  eventService,
+		promoRedeemer: promoRedeemer,
 	}
 }
 
@@ -67,8 +71,10 @@ func (uc *CreateTrip) Execute(ctx context.Context, input CreateTripInput) (*enti
 	estimatedFare := uc.fareCalc.Calculate(distanceKM, estimatedMinutes)
 
 	now := time.Now()
+	tripID := uuid.New()
+
 	trip := &entities.Trip{
-		ID:               uuid.New(),
+		ID:               tripID,
 		PassengerID:      input.PassengerID,
 		TripType:         entities.TripTypeNormal,
 		Status:           entities.StatusRequested,
@@ -82,8 +88,22 @@ func (uc *CreateTrip) Execute(ctx context.Context, input CreateTripInput) (*enti
 		EstimatedFare:    estimatedFare,
 		Currency:         "ZAR",
 		DistanceKM:       &distanceKM,
+		DiscountAmount:   0,
 		CreatedAt:        now,
 		UpdatedAt:        now,
+	}
+
+	// Apply promo code if provided
+	if input.PromoCode != "" && uc.promoRedeemer != nil {
+		discount, promoID, err := uc.promoRedeemer.RedeemForTrip(
+			ctx, input.PromoCode, input.PassengerID, tripID, estimatedFare,
+		)
+		if err != nil {
+			return nil, err
+		}
+		trip.PromotionID = &promoID
+		trip.DiscountAmount = discount
+		trip.EstimatedFare = estimatedFare - discount
 	}
 
 	if err := uc.tripRepo.Create(ctx, trip); err != nil {
@@ -103,7 +123,7 @@ func (uc *CreateTrip) Execute(ctx context.Context, input CreateTripInput) (*enti
 		map[string]interface{}{
 			"pickup_address":  input.PickupAddress,
 			"dropoff_address": input.DropoffAddress,
-			"estimated_fare":  estimatedFare,
+			"estimated_fare":  trip.EstimatedFare,
 			"distance_km":     distanceKM,
 		},
 	)

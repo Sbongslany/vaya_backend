@@ -14,6 +14,7 @@ import (
 	"github.com/yourorg/ehailing/backend/internal/http/handlers"
 	"github.com/yourorg/ehailing/backend/internal/http/middleware"
 	tripDep "github.com/yourorg/ehailing/backend/internal/trip/dependency"
+	promoDep "github.com/yourorg/ehailing/backend/internal/promotions/dependency"
 )
 
 func NewRouter(
@@ -23,6 +24,8 @@ func NewRouter(
 	cfg *config.Config,
 	authContainer *dependency.AuthContainer,
 	tripContainer *tripDep.TripContainer, // <-- ADD THIS LINE
+	promosContainer *promoDep.PromotionsContainer, // <-- ADD THIS
+
 
 ) *gin.Engine {
 	if cfg.Env == "production" {
@@ -187,7 +190,22 @@ func NewRouter(
 		trips.GET("/ws", tripContainer.WSHandler.ServeWS)
 		trips.POST("/devices/token", tripContainer.DeviceHandler.RegisterToken)
 		trips.GET("/ratings/:userId", tripContainer.RatingHandler.GetUserRating)
+		// Promotions (passenger)
+		trips.POST("/promotions/validate", promosContainer.PassengerHandler.ValidatePromoCode)
+		trips.GET("/promotions/my-redemptions", promosContainer.PassengerHandler.GetMyRedemptions)
 
+	}
+
+	// Admin Promotions Routes (protected + admin role)
+	adminPromos := engine.Group("/api/v1/admin/promotions")
+	adminPromos.Use(authContainer.Middleware.Authenticate())
+	{
+		adminPromos.POST("", promosContainer.AdminHandler.CreatePromotion)
+		adminPromos.GET("", promosContainer.AdminHandler.ListPromotions)
+		adminPromos.GET("/:id", promosContainer.AdminHandler.GetPromotion)
+		adminPromos.PUT("/:id", promosContainer.AdminHandler.UpdatePromotion)
+		adminPromos.POST("/:id/activate", promosContainer.AdminHandler.ActivatePromotion)
+		adminPromos.POST("/:id/pause", promosContainer.AdminHandler.PausePromotion)
 	}
 	// ==========================================
 	// OPENAPI DOCUMENTATION (Only registered once)

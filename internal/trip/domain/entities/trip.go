@@ -98,6 +98,8 @@ type Trip struct {
 	CancelledBy        *uuid.UUID
 	CancelledAt        *time.Time
 	CancellationFee    *float64
+	PromotionID        *uuid.UUID
+	DiscountAmount     float64
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 }

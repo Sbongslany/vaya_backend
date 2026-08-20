@@ -14,10 +14,13 @@ type TripRepository interface {
 	UpdateStatus(ctx context.Context, id uuid.UUID, status entities.TripStatus) error
 	FindNearbyRequested(ctx context.Context, lat, lng, radiusKM float64, limit int) ([]*entities.Trip, error)
 	FindActiveByPassengerID(ctx context.Context, passengerID uuid.UUID) (*entities.Trip, error)
+	AssignDriver(ctx context.Context, tripID, driverID uuid.UUID, status entities.TripStatus) error
 }
 
 type TripOfferRepository interface {
 	Create(ctx context.Context, offer *entities.TripOffer) error
+	GetByID(ctx context.Context, id uuid.UUID) (*entities.TripOffer, error)
 	FindByTripID(ctx context.Context, tripID uuid.UUID) ([]*entities.TripOffer, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status entities.OfferStatus) error
+	RejectOthersForTrip(ctx context.Context, tripID, exceptOfferID uuid.UUID) error
 }

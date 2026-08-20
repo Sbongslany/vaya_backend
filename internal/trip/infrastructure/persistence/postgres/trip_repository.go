@@ -73,13 +73,11 @@ func (r *TripRepository) GetByID(ctx context.Context, id uuid.UUID) (*entities.T
 
 func (r *TripRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status entities.TripStatus) error {
 	query := `UPDATE trips SET status = $1, updated_at = NOW() WHERE id = $2`
-
 	_, err := r.pool.Exec(ctx, query, status, id)
 	return err
 }
 
 func (r *TripRepository) FindNearbyRequested(ctx context.Context, lat, lng, radiusKM float64, limit int) ([]*entities.Trip, error) {
-	// Bounding box pre-filter for performance (avoids full table scan)
 	latDelta := radiusKM / 111.0
 	lngDelta := radiusKM / (111.0 * math.Cos(lat*math.Pi/180.0))
 
@@ -108,7 +106,6 @@ func (r *TripRepository) FindNearbyRequested(ctx context.Context, lat, lng, radi
 		if err != nil {
 			return nil, err
 		}
-		// Haversine distance check for precision
 		if haversineDistanceKM(lat, lng, trip.PickupLatitude, trip.PickupLongitude) <= radiusKM {
 			trips = append(trips, trip)
 		}
@@ -127,11 +124,11 @@ func (r *TripRepository) FindActiveByPassengerID(ctx context.Context, passengerI
 	trip, err := scanTrip(r.pool.QueryRow(ctx, query,
 		passengerID,
 		entities.StatusRequested,
-		entities.StatusSearchingDrivers,
 		entities.StatusOffersReceived,
-		entities.StatusDriverSelected,
 		entities.StatusDriverAssigned,
 		entities.StatusDriverEnRoute,
+		entities.StatusDriverArrived,
+		entities.StatusTripStartPending,
 	))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -140,6 +137,12 @@ func (r *TripRepository) FindActiveByPassengerID(ctx context.Context, passengerI
 		return nil, err
 	}
 	return trip, nil
+}
+
+func (r *TripRepository) AssignDriver(ctx context.Context, tripID, driverID uuid.UUID, status entities.TripStatus) error {
+	query := `UPDATE trips SET driver_id = $1, status = $2, updated_at = NOW() WHERE id = $3`
+	_, err := r.pool.Exec(ctx, query, driverID, status, tripID)
+	return err
 }
 
 func haversineDistanceKM(lat1, lng1, lat2, lng2 float64) float64 {

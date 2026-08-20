@@ -9,6 +9,7 @@ import (
 	"github.com/yourorg/ehailing/backend/internal/trip/domain"
 	"github.com/yourorg/ehailing/backend/internal/trip/domain/entities"
 	"github.com/yourorg/ehailing/backend/internal/trip/domain/repositories"
+	"github.com/yourorg/ehailing/backend/internal/trip/domain/services"
 )
 
 type SubmitTripOfferInput struct {
@@ -21,12 +22,18 @@ type SubmitTripOfferInput struct {
 type SubmitTripOffer struct {
 	tripRepo      repositories.TripRepository
 	tripOfferRepo repositories.TripOfferRepository
+	stateMachine  *services.StateMachine
 }
 
-func NewSubmitTripOffer(tripRepo repositories.TripRepository, tripOfferRepo repositories.TripOfferRepository) *SubmitTripOffer {
+func NewSubmitTripOffer(
+	tripRepo repositories.TripRepository,
+	tripOfferRepo repositories.TripOfferRepository,
+	stateMachine *services.StateMachine,
+) *SubmitTripOffer {
 	return &SubmitTripOffer{
 		tripRepo:      tripRepo,
 		tripOfferRepo: tripOfferRepo,
+		stateMachine:  stateMachine,
 	}
 }
 
@@ -39,13 +46,23 @@ func (uc *SubmitTripOffer) Execute(ctx context.Context, input SubmitTripOfferInp
 		return nil, domain.ErrTripNotFound
 	}
 
-	// Only allow offers on trips that are REQUESTED or SEARCHING_DRIVERS
-	if trip.Status != entities.StatusRequested && trip.Status != entities.StatusSearchingDrivers {
+	// Only allow offers on REQUESTED or OFFERS_RECEIVED trips
+	if trip.Status != entities.StatusRequested && trip.Status != entities.StatusOffersReceived {
 		return nil, domain.ErrInvalidStateTransition
 	}
 
 	if input.OfferedFare <= 0 {
 		return nil, domain.ErrInvalidOfferFare
+	}
+
+	// Transition to OFFERS_RECEIVED on first offer
+	if trip.Status == entities.StatusRequested {
+		if err := uc.stateMachine.Transition(trip.Status, entities.StatusOffersReceived); err != nil {
+			return nil, err
+		}
+		if err := uc.tripRepo.UpdateStatus(ctx, trip.ID, entities.StatusOffersReceived); err != nil {
+			return nil, err
+		}
 	}
 
 	now := time.Now()

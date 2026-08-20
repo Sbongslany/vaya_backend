@@ -3,20 +3,18 @@ package services
 import (
 	"fmt"
 
-	"github.com/yourorg/ehailing/backend/internal/trip/domain"
 	"github.com/yourorg/ehailing/backend/internal/trip/domain/entities"
 )
 
 type StateMachine struct{}
 
-func NewStateMachine() *StateMachine { return &StateMachine{} }
+func NewStateMachine() *StateMachine {
+	return &StateMachine{}
+}
 
-// ValidTransitions defines the strict rules for normal trips
 var ValidTransitions = map[entities.TripStatus][]entities.TripStatus{
-	entities.StatusRequested:         {entities.StatusSearchingDrivers, entities.StatusCancelledByPassenger, entities.StatusCancelledBySystem},
-	entities.StatusSearchingDrivers:  {entities.StatusOffersReceived, entities.StatusCancelledByPassenger, entities.StatusCancelledBySystem},
-	entities.StatusOffersReceived:    {entities.StatusDriverSelected, entities.StatusCancelledByPassenger, entities.StatusCancelledBySystem},
-	entities.StatusDriverSelected:    {entities.StatusDriverAssigned, entities.StatusCancelledByPassenger, entities.StatusCancelledByDriver, entities.StatusCancelledBySystem},
+	entities.StatusRequested:         {entities.StatusOffersReceived, entities.StatusDriverAssigned, entities.StatusCancelledByPassenger, entities.StatusCancelledBySystem},
+	entities.StatusOffersReceived:    {entities.StatusDriverAssigned, entities.StatusCancelledByPassenger, entities.StatusCancelledBySystem},
 	entities.StatusDriverAssigned:    {entities.StatusDriverEnRoute, entities.StatusCancelledByPassenger, entities.StatusCancelledByDriver, entities.StatusCancelledBySystem},
 	entities.StatusDriverEnRoute:     {entities.StatusDriverArrived, entities.StatusCancelledByPassenger, entities.StatusCancelledByDriver, entities.StatusCancelledBySystem},
 	entities.StatusDriverArrived:     {entities.StatusTripStartPending, entities.StatusCancelledByPassenger, entities.StatusCancelledByDriver},
@@ -45,7 +43,7 @@ func (sm *StateMachine) CanTransition(current, next entities.TripStatus) bool {
 
 func (sm *StateMachine) Transition(current, next entities.TripStatus) error {
 	if !sm.CanTransition(current, next) {
-		return fmt.Errorf("%w: cannot move from %s to %s", domain.ErrInvalidStateTransition, current, next)
+		return fmt.Errorf("cannot transition from %s to %s", current, next)
 	}
 	return nil
 }

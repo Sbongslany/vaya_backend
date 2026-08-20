@@ -14,11 +14,13 @@ import (
 )
 
 type TripHandler struct {
-	createTrip      *usecases.CreateTrip
-	getTrip         *usecases.GetTrip
-	getNearbyTrips  *usecases.GetNearbyTrips
-	submitTripOffer *usecases.SubmitTripOffer
-	getTripOffers   *usecases.GetTripOffers
+	createTrip            *usecases.CreateTrip
+	getTrip               *usecases.GetTrip
+	getNearbyTrips        *usecases.GetNearbyTrips
+	submitTripOffer       *usecases.SubmitTripOffer
+	getTripOffers         *usecases.GetTripOffers
+	acceptTripOffer       *usecases.AcceptTripOffer
+	confirmTripAssignment *usecases.ConfirmTripAssignment
 }
 
 func NewTripHandler(
@@ -27,13 +29,17 @@ func NewTripHandler(
 	getNearbyTrips *usecases.GetNearbyTrips,
 	submitTripOffer *usecases.SubmitTripOffer,
 	getTripOffers *usecases.GetTripOffers,
+	acceptTripOffer *usecases.AcceptTripOffer,
+	confirmTripAssignment *usecases.ConfirmTripAssignment,
 ) *TripHandler {
 	return &TripHandler{
-		createTrip:      createTrip,
-		getTrip:         getTrip,
-		getNearbyTrips:  getNearbyTrips,
-		submitTripOffer: submitTripOffer,
-		getTripOffers:   getTripOffers,
+		createTrip:            createTrip,
+		getTrip:               getTrip,
+		getNearbyTrips:        getNearbyTrips,
+		submitTripOffer:       submitTripOffer,
+		getTripOffers:         getTripOffers,
+		acceptTripOffer:       acceptTripOffer,
+		confirmTripAssignment: confirmTripAssignment,
 	}
 }
 
@@ -197,10 +203,79 @@ func (h *TripHandler) GetTripOffers(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"offers": offers})
 }
 
+func (h *TripHandler) AcceptTripOffer(c *gin.Context) {
+	userIDStr, exists := c.Get(authMiddleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	passengerID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	tripID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_trip_id"})
+		return
+	}
+
+	offerID, err := uuid.Parse(c.Param("offerId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_offer_id"})
+		return
+	}
+
+	trip, err := h.acceptTripOffer.Execute(c.Request.Context(), usecases.AcceptTripOfferInput{
+		TripID:      tripID,
+		OfferID:     offerID,
+		PassengerID: passengerID,
+	})
+	if err != nil {
+		handleTripError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"trip": trip})
+}
+
+func (h *TripHandler) ConfirmTripAssignment(c *gin.Context) {
+	userIDStr, exists := c.Get(authMiddleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	driverID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	tripID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_trip_id"})
+		return
+	}
+
+	trip, err := h.confirmTripAssignment.Execute(c.Request.Context(), usecases.ConfirmTripAssignmentInput{
+		TripID:   tripID,
+		DriverID: driverID,
+	})
+	if err != nil {
+		handleTripError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"trip": trip})
+}
+
 func handleTripError(c *gin.Context, err error) {
 	switch err {
 	case domain.ErrTripNotFound:
 		c.JSON(http.StatusNotFound, gin.H{"error": "trip_not_found"})
+	case domain.ErrOfferNotFound:
+		c.JSON(http.StatusNotFound, gin.H{"error": "offer_not_found"})
 	case domain.ErrInvalidStateTransition:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_state_transition"})
 	case domain.ErrInvalidCoordinates:
@@ -209,6 +284,8 @@ func handleTripError(c *gin.Context, err error) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_offer_fare"})
 	case domain.ErrActiveTripExists:
 		c.JSON(http.StatusConflict, gin.H{"error": "active_trip_exists"})
+	case domain.ErrUnauthorized:
+		c.JSON(http.StatusForbidden, gin.H{"error": "unauthorized"})
 	default:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_server_error"})
 	}

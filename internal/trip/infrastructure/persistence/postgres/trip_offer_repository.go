@@ -2,8 +2,10 @@ package postgres
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/yourorg/ehailing/backend/internal/trip/domain/entities"
@@ -41,6 +43,19 @@ func (r *TripOfferRepository) Create(ctx context.Context, offer *entities.TripOf
 	return err
 }
 
+func (r *TripOfferRepository) GetByID(ctx context.Context, id uuid.UUID) (*entities.TripOffer, error) {
+	query := `SELECT ` + tripOfferColumns + ` FROM trip_offers WHERE id = $1`
+
+	offer, err := scanTripOffer(r.pool.QueryRow(ctx, query, id))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return offer, nil
+}
+
 func (r *TripOfferRepository) FindByTripID(ctx context.Context, tripID uuid.UUID) ([]*entities.TripOffer, error) {
 	query := `SELECT ` + tripOfferColumns + ` FROM trip_offers WHERE trip_id = $1 ORDER BY offered_fare ASC`
 
@@ -63,7 +78,15 @@ func (r *TripOfferRepository) FindByTripID(ctx context.Context, tripID uuid.UUID
 
 func (r *TripOfferRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status entities.OfferStatus) error {
 	query := `UPDATE trip_offers SET status = $1, updated_at = NOW() WHERE id = $2`
-
 	_, err := r.pool.Exec(ctx, query, status, id)
+	return err
+}
+
+func (r *TripOfferRepository) RejectOthersForTrip(ctx context.Context, tripID, exceptOfferID uuid.UUID) error {
+	query := `UPDATE trip_offers SET status = $1, updated_at = NOW()
+		WHERE trip_id = $2 AND id != $3 AND status = $4`
+	_, err := r.pool.Exec(ctx, query,
+		entities.OfferStatusRejected, tripID, exceptOfferID, entities.OfferStatusPending,
+	)
 	return err
 }

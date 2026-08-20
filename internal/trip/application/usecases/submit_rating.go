@@ -20,20 +20,26 @@ type SubmitRatingInput struct {
 }
 
 type SubmitRating struct {
-	tripRepo     repositories.TripRepository
-	ratingRepo   repositories.TripRatingRepository
-	stateMachine *services.StateMachine
+	tripRepo       repositories.TripRepository
+	ratingRepo     repositories.TripRatingRepository
+	userRatingRepo repositories.UserRatingRepository
+	stateMachine   *services.StateMachine
+	eventService   *services.TripEventService
 }
 
 func NewSubmitRating(
 	tripRepo repositories.TripRepository,
 	ratingRepo repositories.TripRatingRepository,
+	userRatingRepo repositories.UserRatingRepository,
 	stateMachine *services.StateMachine,
+	eventService *services.TripEventService,
 ) *SubmitRating {
 	return &SubmitRating{
-		tripRepo:     tripRepo,
-		ratingRepo:   ratingRepo,
-		stateMachine: stateMachine,
+		tripRepo:       tripRepo,
+		ratingRepo:     ratingRepo,
+		userRatingRepo: userRatingRepo,
+		stateMachine:   stateMachine,
+		eventService:   eventService,
 	}
 }
 
@@ -90,6 +96,25 @@ func (uc *SubmitRating) Execute(ctx context.Context, input SubmitRatingInput) (*
 	if err := uc.ratingRepo.Create(ctx, rating); err != nil {
 		return nil, err
 	}
+
+	// Update the rated user's aggregated rating
+	if err := uc.userRatingRepo.AddRating(ctx, ratedUserID, input.Rating); err != nil {
+		return nil, err
+	}
+
+	// Record rating event
+	_ = uc.eventService.Record(
+		ctx,
+		input.TripID,
+		"RATING_SUBMITTED",
+		&input.RaterID,
+		string(trip.Status),
+		string(trip.Status),
+		map[string]interface{}{
+			"rated_user_id": ratedUserID.String(),
+			"rating":        input.Rating,
+		},
+	)
 
 	// Close the trip once both parties have rated
 	count, err := uc.ratingRepo.CountByTripID(ctx, input.TripID)

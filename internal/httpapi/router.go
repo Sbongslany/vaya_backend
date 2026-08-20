@@ -186,6 +186,7 @@ func NewRouter(
 		trips.GET("/:id/history", tripContainer.EventHandler.GetTripHistory)
 		trips.GET("/ws", tripContainer.WSHandler.ServeWS)
 		trips.POST("/devices/token", tripContainer.DeviceHandler.RegisterToken)
+		trips.GET("/ratings/:userId", tripContainer.RatingHandler.GetUserRating)
 
 	}
 	// ==========================================

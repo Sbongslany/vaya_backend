@@ -19,6 +19,7 @@ type TripContainer struct {
 	EventHandler  *handlers.TripEventHandler
 	WSHandler     *handlers.WSHandler
 	DeviceHandler *handlers.DeviceHandler
+	RatingHandler *handlers.RatingHandler
 }
 
 func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
@@ -29,6 +30,7 @@ func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
 	ratingRepo := postgres.NewTripRatingRepository(pgPool)
 	eventRepo := postgres.NewTripEventRepository(pgPool)
 	deviceTokenRepo := postgres.NewDeviceTokenRepository(pgPool)
+	userRatingRepo := postgres.NewUserRatingRepository(pgPool)
 
 	// Domain services
 	fareCalc := services.NewFareCalculator()
@@ -42,7 +44,6 @@ func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
 	fcmService, err := notifications.NewFirebaseNotificationService(deviceTokenRepo)
 	if err != nil {
 		log.Printf("WARNING: Firebase FCM not initialized: %v. Push notifications will be disabled.", err)
-		// We pass nil to the event service, which safely skips push notifications if FCM fails to load
 		fcmService = nil
 	}
 
@@ -61,7 +62,7 @@ func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
 	startTripUC := usecases.NewStartTrip(tripRepo, stateMachine)
 	completeTripUC := usecases.NewCompleteTrip(tripRepo, stateMachine)
 	processPaymentUC := usecases.NewProcessPayment(tripRepo, paymentRepo, paymentProvider, stateMachine)
-	submitRatingUC := usecases.NewSubmitRating(tripRepo, ratingRepo, stateMachine)
+	submitRatingUC := usecases.NewSubmitRating(tripRepo, ratingRepo, userRatingRepo, stateMachine, eventService)
 
 	// Use cases — long-distance trip
 	createLongDistanceUC := usecases.NewCreateLongDistanceTrip(tripRepo, fareCalc)
@@ -79,10 +80,11 @@ func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
 	reachFinalUC := usecases.NewReachFinalDestination(tripRepo, stateMachine)
 	completeLongDistanceUC := usecases.NewCompleteLongDistanceTrip(tripRepo, stateMachine)
 
-	// Use cases — cancellation, events, & devices
+	// Use cases — cancellation, events, devices & ratings
 	cancelTripUC := usecases.NewCancelTrip(tripRepo, tripOfferRepo, stateMachine, eventService)
 	getTripHistoryUC := usecases.NewGetTripHistory(tripRepo, eventRepo)
 	registerDeviceTokenUC := usecases.NewRegisterDeviceToken(deviceTokenRepo)
+	getUserRatingUC := usecases.NewGetUserRating(userRatingRepo)
 
 	// Handlers
 	handler := handlers.NewTripHandler(
@@ -97,11 +99,13 @@ func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
 	eventHandler := handlers.NewTripEventHandler(getTripHistoryUC)
 	wsHandler := handlers.NewWSHandler(hub)
 	deviceHandler := handlers.NewDeviceHandler(registerDeviceTokenUC)
+	ratingHandler := handlers.NewRatingHandler(getUserRatingUC)
 
 	return &TripContainer{
 		Handler:       handler,
 		EventHandler:  eventHandler,
 		WSHandler:     wsHandler,
 		DeviceHandler: deviceHandler,
+		RatingHandler: ratingHandler,
 	}
 }

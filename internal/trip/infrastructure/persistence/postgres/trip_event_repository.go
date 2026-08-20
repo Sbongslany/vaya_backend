@@ -20,11 +20,11 @@ func NewTripEventRepository(pool *pgxpool.Pool) *TripEventRepository {
 }
 
 func (r *TripEventRepository) Create(ctx context.Context, event *entities.TripEvent) error {
-	query := `INSERT INTO trip_events (trip_id, event_type, actor_id, from_status, to_status, metadata, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)`
+	query := `INSERT INTO trip_events (id, trip_id, event_type, actor_id, from_status, to_status, metadata, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
 
 	_, err := r.pool.Exec(ctx, query,
-		event.TripID, event.EventType, event.ActorID, event.FromStatus, event.ToStatus,
+		event.ID, event.TripID, event.EventType, event.ActorID, event.FromStatus, event.ToStatus,
 		event.Metadata, event.CreatedAt,
 	)
 	return err

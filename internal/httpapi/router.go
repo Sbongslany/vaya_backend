@@ -183,6 +183,7 @@ func NewRouter(
 		trips.POST("/:id/long-distance/return/arrive", tripContainer.Handler.ReachFinalDestination)
 		trips.POST("/:id/long-distance/return/complete", tripContainer.Handler.CompleteLongDistanceTrip)
 		trips.GET("/:id/events", tripContainer.EventHandler.GetTripHistory)
+		trips.GET("/:id/history", tripContainer.EventHandler.GetTripHistory)
 	}
 	// ==========================================
 	// OPENAPI DOCUMENTATION (Only registered once)

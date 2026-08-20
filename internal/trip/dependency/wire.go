@@ -27,15 +27,16 @@ func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
 	fareCalc := services.NewFareCalculator()
 	stateMachine := services.NewStateMachine()
 	paymentProvider := payment.NewDefaultPaymentProvider()
+	eventService := services.NewTripEventService(eventRepo)
 
 	// Use cases — normal trip
-	createTripUC := usecases.NewCreateTrip(tripRepo, fareCalc)
+	createTripUC := usecases.NewCreateTrip(tripRepo, fareCalc, eventService)
 	getTripUC := usecases.NewGetTrip(tripRepo)
 	getNearbyTripsUC := usecases.NewGetNearbyTrips(tripRepo)
-	submitOfferUC := usecases.NewSubmitTripOffer(tripRepo, tripOfferRepo, stateMachine)
-	getOffersUC := usecases.NewGetTripOffers(tripRepo, tripOfferRepo)
-	acceptOfferUC := usecases.NewAcceptTripOffer(tripRepo, tripOfferRepo, stateMachine)
-	confirmAssignmentUC := usecases.NewConfirmTripAssignment(tripRepo, stateMachine)
+	submitTripOfferUC := usecases.NewSubmitTripOffer(tripRepo, tripOfferRepo, stateMachine)
+	getTripOffersUC := usecases.NewGetTripOffers(tripRepo, tripOfferRepo)
+	acceptTripOfferUC := usecases.NewAcceptTripOffer(tripRepo, tripOfferRepo, stateMachine)
+	confirmTripAssignmentUC := usecases.NewConfirmTripAssignment(tripRepo, stateMachine)
 	arriveAtPickupUC := usecases.NewArriveAtPickup(tripRepo, stateMachine)
 	startTripUC := usecases.NewStartTrip(tripRepo, stateMachine)
 	completeTripUC := usecases.NewCompleteTrip(tripRepo, stateMachine)
@@ -43,25 +44,23 @@ func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
 	submitRatingUC := usecases.NewSubmitRating(tripRepo, ratingRepo, stateMachine)
 
 	// Use cases — long-distance trip
-	createLongDistanceUC := usecases.NewCreateLongDistanceTrip(tripRepo, fareCalc)
-	getOpenLongDistanceUC := usecases.NewGetOpenLongDistanceTrips(tripRepo)
-	publishLongDistanceUC := usecases.NewPublishLongDistanceTrip(tripRepo, stateMachine)
-	confirmLongDistanceUC := usecases.NewConfirmLongDistanceAssignment(tripRepo, stateMachine)
-	scheduleLongDistanceUC := usecases.NewScheduleLongDistanceTrip(tripRepo, stateMachine)
+	createLongDistanceTripUC := usecases.NewCreateLongDistanceTrip(tripRepo, fareCalc)
+	getOpenLongDistanceTripsUC := usecases.NewGetOpenLongDistanceTrips(tripRepo)
+	publishLongDistanceTripUC := usecases.NewPublishLongDistanceTrip(tripRepo, stateMachine)
+	confirmLongDistanceAssignmentUC := usecases.NewConfirmLongDistanceAssignment(tripRepo, stateMachine)
+	scheduleLongDistanceTripUC := usecases.NewScheduleLongDistanceTrip(tripRepo, stateMachine)
 	departForPickupUC := usecases.NewDepartForPickup(tripRepo, stateMachine)
 	beginOutboundUC := usecases.NewBeginOutbound(tripRepo, stateMachine)
-	reachOutboundUC := usecases.NewReachOutboundDestination(tripRepo, stateMachine)
-	resolveOutboundUC := usecases.NewResolveOutboundArrival(tripRepo, stateMachine)
+	reachOutboundDestinationUC := usecases.NewReachOutboundDestination(tripRepo, stateMachine)
+	resolveOutboundArrivalUC := usecases.NewResolveOutboundArrival(tripRepo, stateMachine)
 	scheduleReturnUC := usecases.NewScheduleReturn(tripRepo, stateMachine)
 	startReturnUC := usecases.NewStartReturn(tripRepo, stateMachine)
-	beginReturnUC := usecases.NewBeginReturnInProgress(tripRepo, stateMachine)
-	reachFinalUC := usecases.NewReachFinalDestination(tripRepo, stateMachine)
-	completeLongDistanceUC := usecases.NewCompleteLongDistanceTrip(tripRepo, stateMachine)
+	beginReturnInProgressUC := usecases.NewBeginReturnInProgress(tripRepo, stateMachine)
+	reachFinalDestinationUC := usecases.NewReachFinalDestination(tripRepo, stateMachine)
+	completeLongDistanceTripUC := usecases.NewCompleteLongDistanceTrip(tripRepo, stateMachine)
 
-	// Use cases — cancellation
-	cancelTripUC := usecases.NewCancelTrip(tripRepo, tripOfferRepo, stateMachine)
-
-	// Use cases — events
+	// Use cases — cancellation & events
+	cancelTripUC := usecases.NewCancelTrip(tripRepo, tripOfferRepo, stateMachine, eventService)
 	getTripHistoryUC := usecases.NewGetTripHistory(tripRepo, eventRepo)
 
 	// Handlers
@@ -69,29 +68,29 @@ func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
 		createTripUC,
 		getTripUC,
 		getNearbyTripsUC,
-		submitOfferUC,
-		getOffersUC,
-		acceptOfferUC,
-		confirmAssignmentUC,
+		submitTripOfferUC,
+		getTripOffersUC,
+		acceptTripOfferUC,
+		confirmTripAssignmentUC,
 		arriveAtPickupUC,
 		startTripUC,
 		completeTripUC,
 		processPaymentUC,
 		submitRatingUC,
-		createLongDistanceUC,
-		getOpenLongDistanceUC,
-		publishLongDistanceUC,
-		confirmLongDistanceUC,
-		scheduleLongDistanceUC,
+		createLongDistanceTripUC,
+		getOpenLongDistanceTripsUC,
+		publishLongDistanceTripUC,
+		confirmLongDistanceAssignmentUC,
+		scheduleLongDistanceTripUC,
 		departForPickupUC,
 		beginOutboundUC,
-		reachOutboundUC,
-		resolveOutboundUC,
+		reachOutboundDestinationUC,
+		resolveOutboundArrivalUC,
 		scheduleReturnUC,
 		startReturnUC,
-		beginReturnUC,
-		reachFinalUC,
-		completeLongDistanceUC,
+		beginReturnInProgressUC,
+		reachFinalDestinationUC,
+		completeLongDistanceTripUC,
 		cancelTripUC,
 	)
 

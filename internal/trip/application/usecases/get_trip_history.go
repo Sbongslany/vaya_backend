@@ -10,11 +10,6 @@ import (
 	"github.com/yourorg/ehailing/backend/internal/trip/domain/repositories"
 )
 
-type GetTripHistoryInput struct {
-	TripID uuid.UUID
-	UserID uuid.UUID
-}
-
 type GetTripHistory struct {
 	tripRepo  repositories.TripRepository
 	eventRepo repositories.TripEventRepository
@@ -30,8 +25,8 @@ func NewGetTripHistory(
 	}
 }
 
-func (uc *GetTripHistory) Execute(ctx context.Context, input GetTripHistoryInput) ([]*entities.TripEvent, error) {
-	trip, err := uc.tripRepo.GetByID(ctx, input.TripID)
+func (uc *GetTripHistory) Execute(ctx context.Context, tripID uuid.UUID, requesterID uuid.UUID) ([]*entities.TripEvent, error) {
+	trip, err := uc.tripRepo.GetByID(ctx, tripID)
 	if err != nil {
 		return nil, err
 	}
@@ -39,12 +34,11 @@ func (uc *GetTripHistory) Execute(ctx context.Context, input GetTripHistoryInput
 		return nil, domain.ErrTripNotFound
 	}
 
-	// Only trip participants can view the event history
-	isParticipant := input.UserID == trip.PassengerID ||
-		(trip.DriverID != nil && input.UserID == *trip.DriverID)
-	if !isParticipant {
+	isPassenger := trip.PassengerID == requesterID
+	isDriver := trip.DriverID != nil && *trip.DriverID == requesterID
+	if !isPassenger && !isDriver {
 		return nil, domain.ErrUnauthorized
 	}
 
-	return uc.eventRepo.FindByTripID(ctx, input.TripID)
+	return uc.eventRepo.FindByTripID(ctx, tripID)
 }

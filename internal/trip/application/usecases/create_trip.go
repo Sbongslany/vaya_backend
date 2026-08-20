@@ -26,14 +26,20 @@ type CreateTripInput struct {
 }
 
 type CreateTrip struct {
-	tripRepo repositories.TripRepository
-	fareCalc *services.FareCalculator
+	tripRepo     repositories.TripRepository
+	fareCalc     *services.FareCalculator
+	eventService *services.TripEventService
 }
 
-func NewCreateTrip(tripRepo repositories.TripRepository, fareCalc *services.FareCalculator) *CreateTrip {
+func NewCreateTrip(
+	tripRepo repositories.TripRepository,
+	fareCalc *services.FareCalculator,
+	eventService *services.TripEventService,
+) *CreateTrip {
 	return &CreateTrip{
-		tripRepo: tripRepo,
-		fareCalc: fareCalc,
+		tripRepo:     tripRepo,
+		fareCalc:     fareCalc,
+		eventService: eventService,
 	}
 }
 
@@ -57,7 +63,6 @@ func (uc *CreateTrip) Execute(ctx context.Context, input CreateTripInput) (*enti
 		input.PickupLatitude, input.PickupLongitude,
 		input.DropoffLatitude, input.DropoffLongitude,
 	)
-
 	estimatedMinutes := int(distanceKM * 2)
 	estimatedFare := uc.fareCalc.Calculate(distanceKM, estimatedMinutes)
 
@@ -84,6 +89,24 @@ func (uc *CreateTrip) Execute(ctx context.Context, input CreateTripInput) (*enti
 	if err := uc.tripRepo.Create(ctx, trip); err != nil {
 		return nil, err
 	}
+
+	// Record trip created event
+	fromStatus := ""
+	toStatus := string(entities.StatusRequested)
+	_ = uc.eventService.Record(
+		ctx,
+		trip.ID,
+		entities.EventTypeTripCreated,
+		&input.PassengerID,
+		fromStatus,
+		toStatus,
+		map[string]interface{}{
+			"pickup_address":  input.PickupAddress,
+			"dropoff_address": input.DropoffAddress,
+			"estimated_fare":  estimatedFare,
+			"distance_km":     distanceKM,
+		},
+	)
 
 	return trip, nil
 }

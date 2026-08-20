@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// Event types recorded in the trip audit trail
 const (
 	EventTypeTripCreated    = "TRIP_CREATED"
 	EventTypeStatusChanged  = "STATUS_CHANGED"

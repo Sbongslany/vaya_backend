@@ -36,10 +36,7 @@ func (h *TripEventHandler) GetTripHistory(c *gin.Context) {
 		return
 	}
 
-	events, err := h.getTripHistory.Execute(c.Request.Context(), usecases.GetTripHistoryInput{
-		TripID: tripID,
-		UserID: userID,
-	})
+	events, err := h.getTripHistory.Execute(c.Request.Context(), tripID, userID)
 	if err != nil {
 		handleTripError(c, err)
 		return

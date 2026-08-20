@@ -20,6 +20,7 @@ const tripColumns = `id, passenger_id, driver_id, vehicle_id, trip_type, status,
 	pickup_latitude, pickup_longitude, pickup_address,
 	dropoff_latitude, dropoff_longitude, dropoff_address,
 	estimated_fare, final_fare, currency, distance_km,
+	long_distance_type, scheduled_departure, scheduled_return, trip_duration_days,
 	created_at, updated_at`
 
 func scanTrip(rs rowScanner) (*entities.Trip, error) {
@@ -29,6 +30,7 @@ func scanTrip(rs rowScanner) (*entities.Trip, error) {
 		&t.PickupLatitude, &t.PickupLongitude, &t.PickupAddress,
 		&t.DropoffLatitude, &t.DropoffLongitude, &t.DropoffAddress,
 		&t.EstimatedFare, &t.FinalFare, &t.Currency, &t.DistanceKM,
+		&t.LongDistanceType, &t.ScheduledDeparture, &t.ScheduledReturn, &t.TripDurationDays,
 		&t.CreatedAt, &t.UpdatedAt,
 	); err != nil {
 		return nil, err
@@ -46,13 +48,14 @@ func NewTripRepository(pool *pgxpool.Pool) *TripRepository {
 
 func (r *TripRepository) Create(ctx context.Context, trip *entities.Trip) error {
 	query := `INSERT INTO trips (` + tripColumns + `)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)`
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`
 
 	_, err := r.pool.Exec(ctx, query,
 		trip.ID, trip.PassengerID, trip.DriverID, trip.VehicleID, trip.TripType, trip.Status, trip.StartPIN,
 		trip.PickupLatitude, trip.PickupLongitude, trip.PickupAddress,
 		trip.DropoffLatitude, trip.DropoffLongitude, trip.DropoffAddress,
 		trip.EstimatedFare, trip.FinalFare, trip.Currency, trip.DistanceKM,
+		trip.LongDistanceType, trip.ScheduledDeparture, trip.ScheduledReturn, trip.TripDurationDays,
 		trip.CreatedAt, trip.UpdatedAt,
 	)
 	return err
@@ -123,19 +126,35 @@ func (r *TripRepository) FindActiveByPassengerID(ctx context.Context, passengerI
 	query := `SELECT ` + tripColumns + `
 		FROM trips
 		WHERE passenger_id = $1
-			AND status IN ($2, $3, $4, $5, $6, $7)
+			AND status = ANY($2)
 		ORDER BY created_at DESC
 		LIMIT 1`
 
-	trip, err := scanTrip(r.pool.QueryRow(ctx, query,
-		passengerID,
-		entities.StatusRequested,
-		entities.StatusOffersReceived,
-		entities.StatusDriverAssigned,
-		entities.StatusDriverEnRoute,
-		entities.StatusDriverArrived,
-		entities.StatusTripStartPending,
-	))
+	activeStatuses := []string{
+		string(entities.StatusRequested),
+		string(entities.StatusSearchingDrivers),
+		string(entities.StatusOffersReceived),
+		string(entities.StatusDriverSelected),
+		string(entities.StatusDriverAssigned),
+		string(entities.StatusDriverConfirmed),
+		string(entities.StatusScheduled),
+		string(entities.StatusDriverEnRoute),
+		string(entities.StatusDriverArrived),
+		string(entities.StatusTripStartPending),
+		string(entities.StatusTripStarted),
+		string(entities.StatusTripInProgress),
+		string(entities.StatusOutboundInProgress),
+		string(entities.StatusDestinationReached),
+		string(entities.StatusDriverRetained),
+		string(entities.StatusReturnScheduled),
+		string(entities.StatusReturnStarted),
+		string(entities.StatusReturnInProgress),
+		string(entities.StatusFinalDestination),
+		string(entities.StatusQuoteGenerated),
+		string(entities.StatusArrivedAtDest),
+	}
+
+	trip, err := scanTrip(r.pool.QueryRow(ctx, query, passengerID, activeStatuses))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
@@ -149,6 +168,36 @@ func (r *TripRepository) AssignDriver(ctx context.Context, tripID, driverID uuid
 	query := `UPDATE trips SET driver_id = $1, status = $2, updated_at = NOW() WHERE id = $3`
 	_, err := r.pool.Exec(ctx, query, driverID, status, tripID)
 	return err
+}
+
+func (r *TripRepository) FindOpenLongDistanceTrips(ctx context.Context, limit int) ([]*entities.Trip, error) {
+	query := `SELECT ` + tripColumns + `
+		FROM trips
+		WHERE trip_type = $1
+			AND status = ANY($2)
+		ORDER BY scheduled_departure ASC
+		LIMIT $3`
+
+	openStatuses := []string{
+		string(entities.StatusQuoteGenerated),
+		string(entities.StatusSearchingDrivers),
+	}
+
+	rows, err := r.pool.Query(ctx, query, entities.TripTypeLongDistance, openStatuses, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var trips []*entities.Trip
+	for rows.Next() {
+		trip, err := scanTrip(rows)
+		if err != nil {
+			return nil, err
+		}
+		trips = append(trips, trip)
+	}
+	return trips, rows.Err()
 }
 
 func haversineDistanceKM(lat1, lng1, lat2, lng2 float64) float64 {

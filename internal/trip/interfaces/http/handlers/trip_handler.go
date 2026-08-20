@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -14,18 +15,20 @@ import (
 )
 
 type TripHandler struct {
-	createTrip            *usecases.CreateTrip
-	getTrip               *usecases.GetTrip
-	getNearbyTrips        *usecases.GetNearbyTrips
-	submitTripOffer       *usecases.SubmitTripOffer
-	getTripOffers         *usecases.GetTripOffers
-	acceptTripOffer       *usecases.AcceptTripOffer
-	confirmTripAssignment *usecases.ConfirmTripAssignment
-	arriveAtPickup        *usecases.ArriveAtPickup
-	startTrip             *usecases.StartTrip
-	completeTrip          *usecases.CompleteTrip
-	processPayment        *usecases.ProcessPayment
-	submitRating          *usecases.SubmitRating
+	createTrip               *usecases.CreateTrip
+	getTrip                  *usecases.GetTrip
+	getNearbyTrips           *usecases.GetNearbyTrips
+	submitTripOffer          *usecases.SubmitTripOffer
+	getTripOffers            *usecases.GetTripOffers
+	acceptTripOffer          *usecases.AcceptTripOffer
+	confirmTripAssignment    *usecases.ConfirmTripAssignment
+	arriveAtPickup           *usecases.ArriveAtPickup
+	startTrip                *usecases.StartTrip
+	completeTrip             *usecases.CompleteTrip
+	processPayment           *usecases.ProcessPayment
+	submitRating             *usecases.SubmitRating
+	createLongDistanceTrip   *usecases.CreateLongDistanceTrip
+	getOpenLongDistanceTrips *usecases.GetOpenLongDistanceTrips
 }
 
 func NewTripHandler(
@@ -41,20 +44,24 @@ func NewTripHandler(
 	completeTrip *usecases.CompleteTrip,
 	processPayment *usecases.ProcessPayment,
 	submitRating *usecases.SubmitRating,
+	createLongDistanceTrip *usecases.CreateLongDistanceTrip,
+	getOpenLongDistanceTrips *usecases.GetOpenLongDistanceTrips,
 ) *TripHandler {
 	return &TripHandler{
-		createTrip:            createTrip,
-		getTrip:               getTrip,
-		getNearbyTrips:        getNearbyTrips,
-		submitTripOffer:       submitTripOffer,
-		getTripOffers:         getTripOffers,
-		acceptTripOffer:       acceptTripOffer,
-		confirmTripAssignment: confirmTripAssignment,
-		arriveAtPickup:        arriveAtPickup,
-		startTrip:             startTrip,
-		completeTrip:          completeTrip,
-		processPayment:        processPayment,
-		submitRating:          submitRating,
+		createTrip:               createTrip,
+		getTrip:                  getTrip,
+		getNearbyTrips:           getNearbyTrips,
+		submitTripOffer:          submitTripOffer,
+		getTripOffers:            getTripOffers,
+		acceptTripOffer:          acceptTripOffer,
+		confirmTripAssignment:    confirmTripAssignment,
+		arriveAtPickup:           arriveAtPickup,
+		startTrip:                startTrip,
+		completeTrip:             completeTrip,
+		processPayment:           processPayment,
+		submitRating:             submitRating,
+		createLongDistanceTrip:   createLongDistanceTrip,
+		getOpenLongDistanceTrips: getOpenLongDistanceTrips,
 	}
 }
 
@@ -470,6 +477,75 @@ func (h *TripHandler) SubmitRating(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"rating": rating})
 }
 
+type CreateLongDistanceTripRequest struct {
+	PickupLatitude     float64                   `json:"pickup_latitude" binding:"required"`
+	PickupLongitude    float64                   `json:"pickup_longitude" binding:"required"`
+	PickupAddress      string                    `json:"pickup_address" binding:"required"`
+	DropoffLatitude    float64                   `json:"dropoff_latitude" binding:"required"`
+	DropoffLongitude   float64                   `json:"dropoff_longitude" binding:"required"`
+	DropoffAddress     string                    `json:"dropoff_address" binding:"required"`
+	LongDistanceType   entities.LongDistanceType `json:"long_distance_type" binding:"required"`
+	ScheduledDeparture time.Time                 `json:"scheduled_departure" binding:"required"`
+	ScheduledReturn    *time.Time                `json:"scheduled_return"`
+	TripDurationDays   int                       `json:"trip_duration_days"`
+}
+
+func (h *TripHandler) CreateLongDistanceTrip(c *gin.Context) {
+	userIDStr, exists := c.Get(authMiddleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	passengerID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	var req CreateLongDistanceTripRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "details": err.Error()})
+		return
+	}
+
+	trip, err := h.createLongDistanceTrip.Execute(c.Request.Context(), usecases.CreateLongDistanceTripInput{
+		PassengerID:        passengerID,
+		PickupLatitude:     req.PickupLatitude,
+		PickupLongitude:    req.PickupLongitude,
+		PickupAddress:      req.PickupAddress,
+		DropoffLatitude:    req.DropoffLatitude,
+		DropoffLongitude:   req.DropoffLongitude,
+		DropoffAddress:     req.DropoffAddress,
+		LongDistanceType:   req.LongDistanceType,
+		ScheduledDeparture: req.ScheduledDeparture,
+		ScheduledReturn:    req.ScheduledReturn,
+		TripDurationDays:   req.TripDurationDays,
+	})
+	if err != nil {
+		handleTripError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"trip": trip})
+}
+
+func (h *TripHandler) GetOpenLongDistanceTrips(c *gin.Context) {
+	limitStr := c.DefaultQuery("limit", "20")
+	limit, err := strconv.Atoi(limitStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_limit"})
+		return
+	}
+
+	trips, err := h.getOpenLongDistanceTrips.Execute(c.Request.Context(), limit)
+	if err != nil {
+		handleTripError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"trips": trips})
+}
+
 func handleTripError(c *gin.Context, err error) {
 	switch err {
 	case domain.ErrTripNotFound:
@@ -496,6 +572,8 @@ func handleTripError(c *gin.Context, err error) {
 		c.JSON(http.StatusConflict, gin.H{"error": "already_rated"})
 	case domain.ErrNotTripParticipant:
 		c.JSON(http.StatusForbidden, gin.H{"error": "not_trip_participant"})
+	case domain.ErrInvalidSchedule:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_schedule"})
 	default:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_server_error"})
 	}

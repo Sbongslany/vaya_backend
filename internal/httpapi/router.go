@@ -155,6 +155,8 @@ func NewRouter(
 	{
 		trips.POST("", tripContainer.Handler.CreateTrip)
 		trips.GET("/nearby", tripContainer.Handler.GetNearbyTrips)
+		trips.POST("/long-distance", tripContainer.Handler.CreateLongDistanceTrip)
+		trips.GET("/long-distance/open", tripContainer.Handler.GetOpenLongDistanceTrips)
 		trips.GET("/:id", tripContainer.Handler.GetTrip)
 		trips.POST("/:id/offers", tripContainer.Handler.SubmitTripOffer)
 		trips.GET("/:id/offers", tripContainer.Handler.GetTripOffers)

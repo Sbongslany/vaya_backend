@@ -1,20 +1,26 @@
 package services
 
-import "math"
+import (
+	"math"
+
+	"github.com/yourorg/ehailing/backend/internal/trip/domain/entities"
+)
 
 type FareCalculator struct {
-	BaseFare      float64
-	PerKMFare     float64
-	PerMinuteFare float64
-	MinimumFare   float64
+	BaseFare            float64
+	PerKMFare           float64
+	PerMinuteFare       float64
+	MinimumFare         float64
+	RetentionPerDayFare float64
 }
 
 func NewFareCalculator() *FareCalculator {
 	return &FareCalculator{
-		BaseFare:      10.0,  // R10
-		PerKMFare:     5.0,   // R5 per km
-		PerMinuteFare: 1.0,   // R1 per min
-		MinimumFare:   25.0,  // R25 minimum
+		BaseFare:            10.0,
+		PerKMFare:           5.0,
+		PerMinuteFare:       1.0,
+		MinimumFare:         25.0,
+		RetentionPerDayFare: 500.0,
 	}
 }
 
@@ -23,7 +29,27 @@ func (fc *FareCalculator) Calculate(distanceKM float64, durationMinutes int) flo
 	return math.Max(fare, fc.MinimumFare)
 }
 
-// Haversine formula for distance
+// CalculateLongDistanceFare computes fare for long-distance trips.
+// ONE_WAY: outbound driving fare only.
+// RETURN: outbound + return driving fare.
+// MULTI_DAY: outbound fare + driver retention per day.
+func (fc *FareCalculator) CalculateLongDistanceFare(distanceKM float64, durationMinutes int, ldType entities.LongDistanceType, durationDays int) float64 {
+	outboundFare := fc.BaseFare + (distanceKM * fc.PerKMFare) + (float64(durationMinutes) * fc.PerMinuteFare)
+	fare := outboundFare
+
+	switch ldType {
+	case entities.LongDistanceReturn:
+		returnFare := fc.BaseFare + (distanceKM * fc.PerKMFare) + (float64(durationMinutes) * fc.PerMinuteFare)
+		fare += returnFare
+	case entities.LongDistanceMultiDay:
+		if durationDays > 0 {
+			fare += float64(durationDays) * fc.RetentionPerDayFare
+		}
+	}
+
+	return math.Max(fare, fc.MinimumFare)
+}
+
 func CalculateDistanceKM(lat1, lng1, lat2, lng2 float64) float64 {
 	const R = 6371.0
 	dLat := (lat2 - lat1) * math.Pi / 180.0

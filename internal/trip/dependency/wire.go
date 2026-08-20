@@ -39,6 +39,8 @@ func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
 	completeTripUC := usecases.NewCompleteTrip(tripRepo, stateMachine)
 	processPaymentUC := usecases.NewProcessPayment(tripRepo, paymentRepo, paymentProvider, stateMachine)
 	submitRatingUC := usecases.NewSubmitRating(tripRepo, ratingRepo, stateMachine)
+	createLongDistanceUC := usecases.NewCreateLongDistanceTrip(tripRepo, fareCalc)
+	getOpenLongDistanceUC := usecases.NewGetOpenLongDistanceTrips(tripRepo)
 
 	// Handler
 	handler := handlers.NewTripHandler(
@@ -54,6 +56,8 @@ func WireTrip(pgPool *pgxpool.Pool) *TripContainer {
 		completeTripUC,
 		processPaymentUC,
 		submitRatingUC,
+		createLongDistanceUC,
+		getOpenLongDistanceUC,
 	)
 
 	return &TripContainer{

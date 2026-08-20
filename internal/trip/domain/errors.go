@@ -15,4 +15,5 @@ var (
 	ErrInvalidRating          = errors.New("invalid_rating")
 	ErrAlreadyRated           = errors.New("already_rated")
 	ErrNotTripParticipant     = errors.New("not_trip_participant")
+	ErrInvalidSchedule        = errors.New("invalid_schedule")
 )

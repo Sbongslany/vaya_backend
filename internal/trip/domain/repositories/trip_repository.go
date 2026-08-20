@@ -16,6 +16,7 @@ type TripRepository interface {
 	FindNearbyRequested(ctx context.Context, lat, lng, radiusKM float64, limit int) ([]*entities.Trip, error)
 	FindActiveByPassengerID(ctx context.Context, passengerID uuid.UUID) (*entities.Trip, error)
 	AssignDriver(ctx context.Context, tripID, driverID uuid.UUID, status entities.TripStatus) error
+	FindOpenLongDistanceTrips(ctx context.Context, limit int) ([]*entities.Trip, error)
 }
 
 type TripOfferRepository interface {

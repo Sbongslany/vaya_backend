@@ -16,6 +16,7 @@ import (
 	"github.com/yourorg/ehailing/backend/internal/http/handlers"
 	"github.com/yourorg/ehailing/backend/internal/http/middleware"
 	promoDep "github.com/yourorg/ehailing/backend/internal/promotions/dependency"
+	supportDep "github.com/yourorg/ehailing/backend/internal/support/dependency"
 	tripDep "github.com/yourorg/ehailing/backend/internal/trip/dependency"
 	walletDep "github.com/yourorg/ehailing/backend/internal/wallet/dependency"
 )
@@ -31,6 +32,7 @@ func NewRouter(
 	driverContainer *driverDep.DriverContainer,
 	walletContainer *walletDep.WalletContainer,
 	chatContainer *chatDep.ChatContainer,
+	supportContainer *supportDep.SupportContainer,
 ) *gin.Engine {
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -284,6 +286,24 @@ func NewRouter(
 	// ==========================================
 	engine.POST("/api/v1/payments/paystack/webhook", tripContainer.PaymentHandler.HandlePaystackWebhook)
 	engine.POST("/api/v1/payments/paystack/transfer-webhook", walletContainer.Handler.HandleTransferWebhook)
+
+	// ==========================================
+	// SUPPORT TICKET ROUTES (Protected)
+	// ==========================================
+	supportRoutes := engine.Group("/api/v1/support")
+	supportRoutes.Use(authContainer.Middleware.Authenticate())
+	{
+		supportRoutes.POST("/tickets", supportContainer.Handler.CreateTicket)
+		supportRoutes.GET("/tickets", supportContainer.Handler.GetMyTickets)
+		supportRoutes.POST("/tickets/:ticketId/comments", supportContainer.Handler.AddComment)
+	}
+
+	// Admin Support Routes
+	adminSupportRoutes := engine.Group("/api/v1/admin/support")
+	adminSupportRoutes.Use(authContainer.Middleware.Authenticate())
+	{
+		adminSupportRoutes.POST("/tickets/:ticketId/resolve", supportContainer.Handler.ResolveTicket)
+	}
 
 	// ==========================================
 	// OPENAPI DOCUMENTATION

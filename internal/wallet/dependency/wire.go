@@ -13,6 +13,7 @@ import (
 type WalletContainer struct {
 	Handler       *handlers.WalletHandler
 	SplitTripFare *usecases.SplitTripFare
+	AdminTopupUC  *usecases.AdminTopup
 }
 
 func WireWallet(pgPool *pgxpool.Pool, paystackSecretKey string) *WalletContainer {
@@ -50,5 +51,6 @@ func WireWallet(pgPool *pgxpool.Pool, paystackSecretKey string) *WalletContainer
 	return &WalletContainer{
 		Handler:       handler,
 		SplitTripFare: splitTripFareUC,
+		AdminTopupUC:  adminTopupUC,
 	}
 }

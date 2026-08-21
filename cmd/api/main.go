@@ -22,6 +22,7 @@ import (
 	httpapi "github.com/yourorg/ehailing/backend/internal/httpapi"
 	"github.com/yourorg/ehailing/backend/internal/logger"
 	promoDep "github.com/yourorg/ehailing/backend/internal/promotions/dependency"
+	supportDep "github.com/yourorg/ehailing/backend/internal/support/dependency"
 	tripDep "github.com/yourorg/ehailing/backend/internal/trip/dependency"
 	walletDep "github.com/yourorg/ehailing/backend/internal/wallet/dependency"
 	"github.com/yourorg/ehailing/backend/migrations"
@@ -92,6 +93,8 @@ func main() {
 
 	chatContainer := chatDep.WireChat(pgPool)
 
+	upportContainer := supportDep.WireSupport(pgPool, walletContainer)
+
 	// Wire trip dependencies (now passes promosContainer)
 	tripContainer := tripDep.WireTrip(
 		pgPool,
@@ -116,6 +119,7 @@ func main() {
 		driverContainer,
 		walletContainer,
 		chatContainer,
+		upportContainer,
 	)
 
 	// Configure HTTP server.

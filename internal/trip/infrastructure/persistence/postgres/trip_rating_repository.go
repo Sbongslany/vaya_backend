@@ -11,17 +11,7 @@ import (
 	"github.com/yourorg/ehailing/backend/internal/trip/domain/entities"
 )
 
-const tripRatingColumns = `id, trip_id, rater_id, rated_user_id, rating, comment, created_at`
-
-func scanTripRating(rs rowScanner) (*entities.TripRating, error) {
-	r := &entities.TripRating{}
-	if err := rs.Scan(
-		&r.ID, &r.TripID, &r.RaterID, &r.RatedUserID, &r.Rating, &r.Comment, &r.CreatedAt,
-	); err != nil {
-		return nil, err
-	}
-	return r, nil
-}
+const ratingColumns = `id, trip_id, rater_id, rated_user_id, rating, comment, created_at`
 
 type TripRatingRepository struct {
 	pool *pgxpool.Pool
@@ -32,8 +22,8 @@ func NewTripRatingRepository(pool *pgxpool.Pool) *TripRatingRepository {
 }
 
 func (r *TripRatingRepository) Create(ctx context.Context, rating *entities.TripRating) error {
-	query := `INSERT INTO trip_ratings (` + tripRatingColumns + `)
-		VALUES ($1,$2,$3,$4,$5,$6,$7)`
+	query := `INSERT INTO trip_ratings (` + ratingColumns + `)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`
 
 	_, err := r.pool.Exec(ctx, query,
 		rating.ID, rating.TripID, rating.RaterID, rating.RatedUserID,
@@ -42,30 +32,14 @@ func (r *TripRatingRepository) Create(ctx context.Context, rating *entities.Trip
 	return err
 }
 
-func (r *TripRatingRepository) FindByTripID(ctx context.Context, tripID uuid.UUID) ([]*entities.TripRating, error) {
-	query := `SELECT ` + tripRatingColumns + ` FROM trip_ratings WHERE trip_id = $1 ORDER BY created_at ASC`
+func (r *TripRatingRepository) FindByTripAndRater(ctx context.Context, tripID uuid.UUID, raterID uuid.UUID) (*entities.TripRating, error) {
+	query := `SELECT ` + ratingColumns + ` FROM trip_ratings WHERE trip_id = $1 AND rater_id = $2`
 
-	rows, err := r.pool.Query(ctx, query, tripID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var ratings []*entities.TripRating
-	for rows.Next() {
-		rating, err := scanTripRating(rows)
-		if err != nil {
-			return nil, err
-		}
-		ratings = append(ratings, rating)
-	}
-	return ratings, rows.Err()
-}
-
-func (r *TripRatingRepository) FindByTripAndRater(ctx context.Context, tripID, raterID uuid.UUID) (*entities.TripRating, error) {
-	query := `SELECT ` + tripRatingColumns + ` FROM trip_ratings WHERE trip_id = $1 AND rater_id = $2`
-
-	rating, err := scanTripRating(r.pool.QueryRow(ctx, query, tripID, raterID))
+	rating := &entities.TripRating{}
+	err := r.pool.QueryRow(ctx, query, tripID, raterID).Scan(
+		&rating.ID, &rating.TripID, &rating.RaterID, &rating.RatedUserID,
+		&rating.Rating, &rating.Comment, &rating.CreatedAt,
+	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil

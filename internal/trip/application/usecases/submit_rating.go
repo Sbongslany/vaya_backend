@@ -103,18 +103,20 @@ func (uc *SubmitRating) Execute(ctx context.Context, input SubmitRatingInput) (*
 	}
 
 	// Record rating event
-	_ = uc.eventService.Record(
-		ctx,
-		input.TripID,
-		"RATING_SUBMITTED",
-		&input.RaterID,
-		string(trip.Status),
-		string(trip.Status),
-		map[string]interface{}{
-			"rated_user_id": ratedUserID.String(),
-			"rating":        input.Rating,
-		},
-	)
+	if uc.eventService != nil {
+		_ = uc.eventService.Record(
+			ctx,
+			input.TripID,
+			"RATING_SUBMITTED",
+			&input.RaterID,
+			string(trip.Status),
+			string(trip.Status),
+			map[string]interface{}{
+				"rated_user_id": ratedUserID.String(),
+				"rating":        input.Rating,
+			},
+		)
+	}
 
 	// Close the trip once both parties have rated
 	count, err := uc.ratingRepo.CountByTripID(ctx, input.TripID)

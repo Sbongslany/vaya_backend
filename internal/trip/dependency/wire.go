@@ -15,19 +15,28 @@ import (
 	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/persistence/postgres"
 	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/websocket"
 	"github.com/yourorg/ehailing/backend/internal/trip/interfaces/http/handlers"
-	walletDep "github.com/yourorg/ehailing/backend/internal/wallet/dependency" // <-- ADDED
+	walletUseCases "github.com/yourorg/ehailing/backend/internal/wallet/application/usecases"
+	walletDep "github.com/yourorg/ehailing/backend/internal/wallet/dependency"
+	walletPostgres "github.com/yourorg/ehailing/backend/internal/wallet/infrastructure/persistence/postgres"
 )
 
 type TripContainer struct {
-	Handler       *handlers.TripHandler
-	EventHandler  *handlers.TripEventHandler
-	WSHandler     *handlers.WSHandler
-	DeviceHandler *handlers.DeviceHandler
-	RatingHandler *handlers.RatingHandler
+	Handler        *handlers.TripHandler
+	EventHandler   *handlers.TripEventHandler
+	WSHandler      *handlers.WSHandler
+	DeviceHandler  *handlers.DeviceHandler
+	RatingHandler  *handlers.RatingHandler
+	PaymentHandler *handlers.PaymentHandler
 }
 
-// UPDATED SIGNATURE: Added walletContainer parameter
-func WireTrip(pgPool *pgxpool.Pool, promosContainer *promoDep.PromotionsContainer, redisClient *redis.Client, walletContainer *walletDep.WalletContainer) *TripContainer {
+func WireTrip(
+	pgPool *pgxpool.Pool,
+	promosContainer *promoDep.PromotionsContainer,
+	redisClient *redis.Client,
+	walletContainer *walletDep.WalletContainer,
+	paystackSecretKey string,
+	paystackCallbackURL string,
+) *TripContainer {
 	// Repositories
 	tripRepo := postgres.NewTripRepository(pgPool)
 	tripOfferRepo := postgres.NewTripOfferRepository(pgPool)
@@ -40,7 +49,9 @@ func WireTrip(pgPool *pgxpool.Pool, promosContainer *promoDep.PromotionsContaine
 	// Domain services
 	fareCalc := services.NewFareCalculator()
 	stateMachine := services.NewStateMachine()
-	paymentProvider := payment.NewDefaultPaymentProvider()
+
+	// Paystack service
+	paystackService := payment.NewPaystackService(paystackSecretKey)
 
 	// WebSocket Hub
 	hub := websocket.NewHub()
@@ -48,26 +59,29 @@ func WireTrip(pgPool *pgxpool.Pool, promosContainer *promoDep.PromotionsContaine
 	// FCM Notification Service
 	fcmService, err := notifications.NewFirebaseNotificationService(deviceTokenRepo)
 	if err != nil {
-		log.Printf("WARNING: Firebase FCM not initialized: %v. Push notifications will be disabled.", err)
+		log.Printf("WARNING: Firebase FCM not initialized: %v", err)
 		fcmService = nil
 	}
 
-	// Event service wired to broadcast to WS AND send FCM pushes
+	// Event service
 	eventService := services.NewTripEventService(eventRepo, tripRepo, hub, fcmService)
 
-	// Driver state manager (marks drivers BUSY/ONLINE)
+	// Driver state manager
 	driverStateRepo := driverRedis.NewDriverStateRepository(redisClient)
 	driverStateManager := driverRedis.NewDriverStateManagerAdapter(driverStateRepo)
 
 	// Promotion redeemer adapter
 	promoRedeemer := promoDep.NewPromotionRedeemerAdapter(promosContainer.RedeemUC)
 
-	// Fare splitter adapter (connects to Wallet module)
+	// Fare splitter adapter
 	var fareSplitter services.FareSplitter
 	if walletContainer != nil && walletContainer.SplitTripFare != nil {
 		fareSplitter = walletDep.NewFareSplitterAdapter(walletContainer.SplitTripFare)
 	}
 
+	// Wallet balance use case (for wallet payments)
+	walletPostgresRepo := walletPostgres.NewWalletRepository(pgPool)
+	walletBalanceUC := walletUseCases.NewGetWallet(walletPostgresRepo)
 	// Use cases — normal trip
 	createTripUC := usecases.NewCreateTrip(tripRepo, fareCalc, eventService, promoRedeemer)
 	getTripUC := usecases.NewGetTrip(tripRepo)
@@ -78,10 +92,8 @@ func WireTrip(pgPool *pgxpool.Pool, promosContainer *promoDep.PromotionsContaine
 	confirmAssignmentUC := usecases.NewConfirmTripAssignment(tripRepo, stateMachine)
 	arriveAtPickupUC := usecases.NewArriveAtPickup(tripRepo, stateMachine)
 	startTripUC := usecases.NewStartTrip(tripRepo, stateMachine)
-
-	// UPDATED: Pass fareSplitter
 	completeTripUC := usecases.NewCompleteTrip(tripRepo, stateMachine, driverStateManager, fareSplitter)
-
+	paymentProvider := payment.NewDefaultPaymentProvider()
 	processPaymentUC := usecases.NewProcessPayment(tripRepo, paymentRepo, paymentProvider, stateMachine)
 	submitRatingUC := usecases.NewSubmitRating(tripRepo, ratingRepo, userRatingRepo, stateMachine, eventService)
 
@@ -99,8 +111,6 @@ func WireTrip(pgPool *pgxpool.Pool, promosContainer *promoDep.PromotionsContaine
 	startReturnUC := usecases.NewStartReturn(tripRepo, stateMachine)
 	beginReturnUC := usecases.NewBeginReturnInProgress(tripRepo, stateMachine)
 	reachFinalUC := usecases.NewReachFinalDestination(tripRepo, stateMachine)
-
-	// UPDATED: Pass fareSplitter
 	completeLongDistanceUC := usecases.NewCompleteLongDistanceTrip(tripRepo, stateMachine, fareSplitter)
 
 	// Use cases — cancellation, events, devices & ratings
@@ -108,6 +118,14 @@ func WireTrip(pgPool *pgxpool.Pool, promosContainer *promoDep.PromotionsContaine
 	getTripHistoryUC := usecases.NewGetTripHistory(tripRepo, eventRepo)
 	registerDeviceTokenUC := usecases.NewRegisterDeviceToken(deviceTokenRepo)
 	getUserRatingUC := usecases.NewGetUserRating(userRatingRepo)
+
+	// Use cases — payments
+	initiatePaymentUC := usecases.NewInitiateTripPayment(
+		tripRepo, paymentRepo, paystackService, walletBalanceUC, paystackCallbackURL,
+	)
+	handleWebhookUC := usecases.NewHandlePaystackWebhook(
+		paymentRepo, tripRepo, paystackService, stateMachine,
+	)
 
 	// Handlers
 	handler := handlers.NewTripHandler(
@@ -123,12 +141,14 @@ func WireTrip(pgPool *pgxpool.Pool, promosContainer *promoDep.PromotionsContaine
 	wsHandler := handlers.NewWSHandler(hub)
 	deviceHandler := handlers.NewDeviceHandler(registerDeviceTokenUC)
 	ratingHandler := handlers.NewRatingHandler(getUserRatingUC)
+	paymentHandler := handlers.NewPaymentHandler(initiatePaymentUC, handleWebhookUC, paystackService)
 
 	return &TripContainer{
-		Handler:       handler,
-		EventHandler:  eventHandler,
-		WSHandler:     wsHandler,
-		DeviceHandler: deviceHandler,
-		RatingHandler: ratingHandler,
+		Handler:        handler,
+		EventHandler:   eventHandler,
+		WSHandler:      wsHandler,
+		DeviceHandler:  deviceHandler,
+		RatingHandler:  ratingHandler,
+		PaymentHandler: paymentHandler,
 	}
 }

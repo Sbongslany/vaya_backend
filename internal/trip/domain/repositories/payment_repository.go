@@ -11,12 +11,7 @@ import (
 type PaymentRepository interface {
 	Create(ctx context.Context, payment *entities.Payment) error
 	GetByTripID(ctx context.Context, tripID uuid.UUID) (*entities.Payment, error)
+	GetByReference(ctx context.Context, reference string) (*entities.Payment, error)
 	UpdateStatus(ctx context.Context, id uuid.UUID, status entities.PaymentStatus) error
-}
-
-type TripRatingRepository interface {
-	Create(ctx context.Context, rating *entities.TripRating) error
-	FindByTripID(ctx context.Context, tripID uuid.UUID) ([]*entities.TripRating, error)
-	FindByTripAndRater(ctx context.Context, tripID, raterID uuid.UUID) (*entities.TripRating, error)
-	CountByTripID(ctx context.Context, tripID uuid.UUID) (int, error)
+	UpdatePaystackFields(ctx context.Context, id uuid.UUID, reference string, authURL string) error
 }

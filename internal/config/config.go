@@ -36,6 +36,11 @@ type Config struct {
 	CloudinaryCloudName string
 	CloudinaryAPIKey    string
 	CloudinaryAPISecret string
+
+	// Paystack
+	PaystackSecretKey   string
+	PaystackCallbackURL string
+	AppBaseURL          string
 }
 
 type PostgresConfig struct {
@@ -335,6 +340,14 @@ func Load() (*Config, error) {
 	}
 
 	// -------------------------------------------------------------------------
+	// Paystack
+	// -------------------------------------------------------------------------
+
+	paystackSecretKey := getEnv("PAYSTACK_SECRET_KEY", "")
+	paystackCallbackURL := getEnv("PAYSTACK_CALLBACK_URL", "http://localhost:8080/api/v1/payments/paystack/webhook")
+	appBaseURL := getEnv("APP_BASE_URL", "http://localhost:3000")
+
+	// -------------------------------------------------------------------------
 	// Build configuration
 	// -------------------------------------------------------------------------
 
@@ -386,6 +399,10 @@ func Load() (*Config, error) {
 		CloudinaryCloudName: cloudinaryCloudName,
 		CloudinaryAPIKey:    cloudinaryAPIKey,
 		CloudinaryAPISecret: cloudinaryAPISecret,
+
+		PaystackSecretKey:   paystackSecretKey,
+		PaystackCallbackURL: paystackCallbackURL,
+		AppBaseURL:          appBaseURL,
 	}
 
 	return cfg, nil

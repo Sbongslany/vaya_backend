@@ -25,23 +25,15 @@ const (
 )
 
 type Payment struct {
-	ID          uuid.UUID
-	TripID      uuid.UUID
-	PassengerID uuid.UUID
-	Amount      float64
-	Currency    string
-	Method      PaymentMethod
-	Status      PaymentStatus
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-}
-
-type TripRating struct {
-	ID          uuid.UUID
-	TripID      uuid.UUID
-	RaterID     uuid.UUID
-	RatedUserID uuid.UUID
-	Rating      int
-	Comment     string
-	CreatedAt   time.Time
+	ID                       uuid.UUID
+	TripID                   uuid.UUID
+	PassengerID              uuid.UUID
+	Amount                   float64
+	Currency                 string
+	Method                   PaymentMethod
+	Status                   PaymentStatus
+	PaystackReference        *string
+	PaystackAuthorizationURL *string
+	CreatedAt                time.Time
+	UpdatedAt                time.Time
 }

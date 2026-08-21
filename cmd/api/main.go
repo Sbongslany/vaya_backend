@@ -90,7 +90,14 @@ func main() {
 	promosContainer := promoDep.WirePromotions(pgPool)
 
 	// Wire trip dependencies (now passes promosContainer)
-	tripContainer := tripDep.WireTrip(pgPool, promosContainer, redisClient, walletContainer)
+	tripContainer := tripDep.WireTrip(
+		pgPool,
+		promosContainer,
+		redisClient,
+		walletContainer,
+		cfg.PaystackSecretKey,
+		cfg.PaystackCallbackURL,
+	)
 
 	driverContainer := driverDep.WireDriver(redisClient)
 

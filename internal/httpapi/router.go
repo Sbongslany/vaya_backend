@@ -30,7 +30,6 @@ func NewRouter(
 	driverContainer *driverDep.DriverContainer, // <-- ADD THIS LINE
 	walletContainer *walletDep.WalletContainer, // <-- ADD THIS LINE
 
-
 ) *gin.Engine {
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -197,6 +196,7 @@ func NewRouter(
 		// Promotions (passenger)
 		trips.POST("/promotions/validate", promosContainer.PassengerHandler.ValidatePromoCode)
 		trips.GET("/promotions/my-redemptions", promosContainer.PassengerHandler.GetMyRedemptions)
+		trips.POST("/:id/pay/initiate", tripContainer.PaymentHandler.InitiatePayment)
 
 	}
 
@@ -222,7 +222,7 @@ func NewRouter(
 		driverState.GET("/nearby", driverContainer.Handler.GetNearbyDrivers)
 	}
 
-		// Wallet Routes (passenger/driver)
+	// Wallet Routes (passenger/driver)
 	wallet := engine.Group("/api/v1/wallet")
 	wallet.Use(authContainer.Middleware.Authenticate())
 	{
@@ -236,6 +236,9 @@ func NewRouter(
 	{
 		adminWallet.POST("/topup", walletContainer.Handler.AdminTopup)
 	}
+
+	// Paystack Webhook (PUBLIC - no auth, Paystack calls this directly)
+	engine.POST("/api/v1/payments/paystack/webhook", tripContainer.PaymentHandler.HandlePaystackWebhook)
 	// ==========================================
 	// OPENAPI DOCUMENTATION (Only registered once)
 	// ==========================================

@@ -16,6 +16,7 @@ import (
 	driverDep "github.com/yourorg/ehailing/backend/internal/driver/dependency"
 	"github.com/yourorg/ehailing/backend/internal/http/handlers"
 	"github.com/yourorg/ehailing/backend/internal/http/middleware"
+	kycDep "github.com/yourorg/ehailing/backend/internal/kyc/dependency"
 	promoDep "github.com/yourorg/ehailing/backend/internal/promotions/dependency"
 	supportDep "github.com/yourorg/ehailing/backend/internal/support/dependency"
 	tripDep "github.com/yourorg/ehailing/backend/internal/trip/dependency"
@@ -35,6 +36,7 @@ func NewRouter(
 	chatContainer *chatDep.ChatContainer,
 	supportContainer *supportDep.SupportContainer,
 	adminContainer *adminDep.AdminContainer,
+	kycContainer *kycDep.KYCContainer,
 ) *gin.Engine {
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -321,6 +323,20 @@ func NewRouter(
 		adminDashboard.GET("/users", adminContainer.Handler.ListUsers)
 		adminDashboard.PATCH("/users/:userId/status", adminContainer.Handler.UpdateUserStatus)
 		adminDashboard.GET("/trips", adminContainer.Handler.ListAllTrips)
+	}
+
+	// ==========================================
+	// ADMIN KYC ROUTES (Protected + Admin Role)
+	// ==========================================
+	adminKYC := engine.Group("/api/v1/admin/kyc")
+	adminKYC.Use(
+		authContainer.Middleware.Authenticate(),
+		authContainer.AdminMiddleware.RequireAdmin(),
+	)
+	{
+		adminKYC.GET("/pending", kycContainer.Handler.ListPendingKYC)
+		adminKYC.GET("/drivers/:userId/documents", kycContainer.Handler.GetDriverDocuments)
+		adminKYC.POST("/documents/:documentId/review", kycContainer.Handler.ReviewDocument)
 	}
 
 	// ==========================================

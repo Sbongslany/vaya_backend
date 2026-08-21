@@ -14,19 +14,20 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
 
+	adminDep "github.com/yourorg/ehailing/backend/internal/admin/dependency"
 	"github.com/yourorg/ehailing/backend/internal/auth/dependency"
 	chatDep "github.com/yourorg/ehailing/backend/internal/chat/dependency"
 	"github.com/yourorg/ehailing/backend/internal/config"
 	"github.com/yourorg/ehailing/backend/internal/database"
 	driverDep "github.com/yourorg/ehailing/backend/internal/driver/dependency" // <-- ADD THIS
 	httpapi "github.com/yourorg/ehailing/backend/internal/httpapi"
+	kycDep "github.com/yourorg/ehailing/backend/internal/kyc/dependency"
 	"github.com/yourorg/ehailing/backend/internal/logger"
 	promoDep "github.com/yourorg/ehailing/backend/internal/promotions/dependency"
 	supportDep "github.com/yourorg/ehailing/backend/internal/support/dependency"
 	tripDep "github.com/yourorg/ehailing/backend/internal/trip/dependency"
 	walletDep "github.com/yourorg/ehailing/backend/internal/wallet/dependency"
 	"github.com/yourorg/ehailing/backend/migrations"
-	adminDep "github.com/yourorg/ehailing/backend/internal/admin/dependency"
 )
 
 func main() {
@@ -98,6 +99,8 @@ func main() {
 
 	adminContainer := adminDep.WireAdmin(pgPool)
 
+	kycContainer := kycDep.WireKYC(pgPool)
+
 	// Wire trip dependencies (now passes promosContainer)
 	tripContainer := tripDep.WireTrip(
 		pgPool,
@@ -124,6 +127,7 @@ func main() {
 		chatContainer,
 		supportContainer,
 		adminContainer,
+		kycContainer,
 	)
 
 	// Configure HTTP server.

@@ -17,17 +17,20 @@ type CompleteTripInput struct {
 }
 
 type CompleteTrip struct {
-	tripRepo     repositories.TripRepository
-	stateMachine *services.StateMachine
+	tripRepo           repositories.TripRepository
+	stateMachine       *services.StateMachine
+	driverStateManager services.DriverStateManager
 }
 
 func NewCompleteTrip(
 	tripRepo repositories.TripRepository,
 	stateMachine *services.StateMachine,
+	driverStateManager services.DriverStateManager,
 ) *CompleteTrip {
 	return &CompleteTrip{
-		tripRepo:     tripRepo,
-		stateMachine: stateMachine,
+		tripRepo:           tripRepo,
+		stateMachine:       stateMachine,
+		driverStateManager: driverStateManager,
 	}
 }
 
@@ -50,9 +53,17 @@ func (uc *CompleteTrip) Execute(ctx context.Context, input CompleteTripInput) (*
 
 	// Use estimated fare as final fare (will be enhanced with GPS tracking later)
 	finalFare := trip.EstimatedFare
+	if trip.FinalFare != nil {
+		finalFare = *trip.FinalFare
+	}
 
 	if err := uc.tripRepo.UpdateStatusAndFinalFare(ctx, trip.ID, entities.StatusTripCompleted, finalFare); err != nil {
 		return nil, err
+	}
+
+	// Mark driver as ONLINE so they can receive new trips
+	if trip.DriverID != nil && uc.driverStateManager != nil {
+		_ = uc.driverStateManager.MarkOnline(ctx, trip.DriverID.String())
 	}
 
 	trip.Status = entities.StatusTripCompleted

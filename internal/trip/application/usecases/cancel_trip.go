@@ -19,10 +19,11 @@ type CancelTripInput struct {
 }
 
 type CancelTrip struct {
-	tripRepo      repositories.TripRepository
-	tripOfferRepo repositories.TripOfferRepository
-	stateMachine  *services.StateMachine
-	eventService  *services.TripEventService
+	tripRepo           repositories.TripRepository
+	tripOfferRepo      repositories.TripOfferRepository
+	stateMachine       *services.StateMachine
+	eventService       *services.TripEventService
+	driverStateManager services.DriverStateManager
 }
 
 func NewCancelTrip(
@@ -30,12 +31,14 @@ func NewCancelTrip(
 	tripOfferRepo repositories.TripOfferRepository,
 	stateMachine *services.StateMachine,
 	eventService *services.TripEventService,
+	driverStateManager services.DriverStateManager,
 ) *CancelTrip {
 	return &CancelTrip{
-		tripRepo:      tripRepo,
-		tripOfferRepo: tripOfferRepo,
-		stateMachine:  stateMachine,
-		eventService:  eventService,
+		tripRepo:           tripRepo,
+		tripOfferRepo:      tripOfferRepo,
+		stateMachine:       stateMachine,
+		eventService:       eventService,
+		driverStateManager: driverStateManager,
 	}
 }
 
@@ -48,6 +51,7 @@ func (uc *CancelTrip) Execute(ctx context.Context, input CancelTripInput) (*enti
 		return nil, domain.ErrTripNotFound
 	}
 
+	// Determine who is cancelling and the target status
 	var cancelStatus entities.TripStatus
 	switch {
 	case input.UserID == trip.PassengerID:
@@ -58,14 +62,14 @@ func (uc *CancelTrip) Execute(ctx context.Context, input CancelTripInput) (*enti
 		return nil, domain.ErrUnauthorized
 	}
 
+	// Capture old status before overwriting for the event log
+	oldStatus := string(trip.Status)
+
 	if err := uc.stateMachine.Transition(trip.Status, cancelStatus); err != nil {
 		return nil, domain.ErrInvalidStateTransition
 	}
 
 	fee := uc.calculateCancellationFee(trip)
-
-	// Capture old status before updating
-	oldStatus := string(trip.Status)
 
 	now := time.Now()
 	trip.Status = cancelStatus
@@ -80,27 +84,45 @@ func (uc *CancelTrip) Execute(ctx context.Context, input CancelTripInput) (*enti
 		return nil, err
 	}
 
+	// Expire any pending offers for this trip
 	if err := uc.tripOfferRepo.ExpireAllForTrip(ctx, trip.ID); err != nil {
 		return nil, err
 	}
 
 	// Record cancellation event
-	payload := map[string]interface{}{
-		"status": string(cancelStatus),
-	}
-	if input.Reason != "" {
-		payload["reason"] = input.Reason
-	}
-	if fee != nil {
-		payload["cancellation_fee"] = *fee
+	if uc.eventService != nil {
+		payload := map[string]interface{}{
+			"cancelled_by": input.UserID.String(),
+			"status":       string(cancelStatus),
+		}
+		if input.Reason != "" {
+			payload["reason"] = input.Reason
+		}
+		if fee != nil {
+			payload["cancellation_fee"] = *fee
+		}
+		_ = uc.eventService.Record(
+			ctx,
+			trip.ID,
+			entities.EventTypeTripCancelled,
+			&input.UserID,
+			oldStatus,
+			string(cancelStatus),
+			payload,
+		)
 	}
 
-	newStatus := string(cancelStatus)
-	_ = uc.eventService.Record(ctx, trip.ID, entities.EventTypeTripCancelled, &input.UserID, oldStatus, newStatus, payload)
+	// Release the driver back to ONLINE if one was assigned
+	if trip.DriverID != nil && uc.driverStateManager != nil {
+		_ = uc.driverStateManager.MarkOnline(ctx, trip.DriverID.String())
+	}
 
 	return trip, nil
 }
 
+// calculateCancellationFee applies the cancellation policy:
+// - No fee if no driver was assigned yet.
+// - Flat R20 fee if a driver had already been assigned.
 func (uc *CancelTrip) calculateCancellationFee(trip *entities.Trip) *float64 {
 	if trip.DriverID == nil {
 		return nil

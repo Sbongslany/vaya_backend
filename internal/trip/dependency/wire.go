@@ -4,7 +4,9 @@ import (
 	"log"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 
+	driverRedis "github.com/yourorg/ehailing/backend/internal/driver/infrastructure/persistence/redis"
 	promoDep "github.com/yourorg/ehailing/backend/internal/promotions/dependency"
 	"github.com/yourorg/ehailing/backend/internal/trip/application/usecases"
 	"github.com/yourorg/ehailing/backend/internal/trip/domain/services"
@@ -23,7 +25,7 @@ type TripContainer struct {
 	RatingHandler *handlers.RatingHandler
 }
 
-func WireTrip(pgPool *pgxpool.Pool, promosContainer *promoDep.PromotionsContainer) *TripContainer {
+func WireTrip(pgPool *pgxpool.Pool, promosContainer *promoDep.PromotionsContainer, redisClient *redis.Client) *TripContainer {
 	// Repositories
 	tripRepo := postgres.NewTripRepository(pgPool)
 	tripOfferRepo := postgres.NewTripOfferRepository(pgPool)
@@ -51,18 +53,24 @@ func WireTrip(pgPool *pgxpool.Pool, promosContainer *promoDep.PromotionsContaine
 	// Event service wired to broadcast to WS AND send FCM pushes
 	eventService := services.NewTripEventService(eventRepo, tripRepo, hub, fcmService)
 
-	// Use cases — normal trip
+	// Driver state manager (marks drivers BUSY/ONLINE)
+	driverStateRepo := driverRedis.NewDriverStateRepository(redisClient)
+	driverStateManager := driverRedis.NewDriverStateManagerAdapter(driverStateRepo)
+
+	// Promotion redeemer adapter
 	promoRedeemer := promoDep.NewPromotionRedeemerAdapter(promosContainer.RedeemUC)
+
+	// Use cases — normal trip
 	createTripUC := usecases.NewCreateTrip(tripRepo, fareCalc, eventService, promoRedeemer)
 	getTripUC := usecases.NewGetTrip(tripRepo)
 	getNearbyTripsUC := usecases.NewGetNearbyTrips(tripRepo)
 	submitOfferUC := usecases.NewSubmitTripOffer(tripRepo, tripOfferRepo, stateMachine)
 	getOffersUC := usecases.NewGetTripOffers(tripRepo, tripOfferRepo)
-	acceptOfferUC := usecases.NewAcceptTripOffer(tripRepo, tripOfferRepo, stateMachine)
+	acceptOfferUC := usecases.NewAcceptTripOffer(tripRepo, tripOfferRepo, stateMachine, driverStateManager)
 	confirmAssignmentUC := usecases.NewConfirmTripAssignment(tripRepo, stateMachine)
 	arriveAtPickupUC := usecases.NewArriveAtPickup(tripRepo, stateMachine)
 	startTripUC := usecases.NewStartTrip(tripRepo, stateMachine)
-	completeTripUC := usecases.NewCompleteTrip(tripRepo, stateMachine)
+	completeTripUC := usecases.NewCompleteTrip(tripRepo, stateMachine, driverStateManager)
 	processPaymentUC := usecases.NewProcessPayment(tripRepo, paymentRepo, paymentProvider, stateMachine)
 	submitRatingUC := usecases.NewSubmitRating(tripRepo, ratingRepo, userRatingRepo, stateMachine, eventService)
 
@@ -83,19 +91,40 @@ func WireTrip(pgPool *pgxpool.Pool, promosContainer *promoDep.PromotionsContaine
 	completeLongDistanceUC := usecases.NewCompleteLongDistanceTrip(tripRepo, stateMachine)
 
 	// Use cases — cancellation, events, devices & ratings
-	cancelTripUC := usecases.NewCancelTrip(tripRepo, tripOfferRepo, stateMachine, eventService)
+	cancelTripUC := usecases.NewCancelTrip(tripRepo, tripOfferRepo, stateMachine, eventService, driverStateManager)
 	getTripHistoryUC := usecases.NewGetTripHistory(tripRepo, eventRepo)
 	registerDeviceTokenUC := usecases.NewRegisterDeviceToken(deviceTokenRepo)
 	getUserRatingUC := usecases.NewGetUserRating(userRatingRepo)
 
 	// Handlers
 	handler := handlers.NewTripHandler(
-		createTripUC, getTripUC, getNearbyTripsUC, submitOfferUC, getOffersUC,
-		acceptOfferUC, confirmAssignmentUC, arriveAtPickupUC, startTripUC, completeTripUC,
-		processPaymentUC, submitRatingUC, createLongDistanceUC, getOpenLongDistanceUC,
-		publishLongDistanceUC, confirmLongDistanceUC, scheduleLongDistanceUC, departForPickupUC,
-		beginOutboundUC, reachOutboundUC, resolveOutboundUC, scheduleReturnUC, startReturnUC,
-		beginReturnUC, reachFinalUC, completeLongDistanceUC, cancelTripUC,
+		createTripUC,
+		getTripUC,
+		getNearbyTripsUC,
+		submitOfferUC,
+		getOffersUC,
+		acceptOfferUC,
+		confirmAssignmentUC,
+		arriveAtPickupUC,
+		startTripUC,
+		completeTripUC,
+		processPaymentUC,
+		submitRatingUC,
+		createLongDistanceUC,
+		getOpenLongDistanceUC,
+		publishLongDistanceUC,
+		confirmLongDistanceUC,
+		scheduleLongDistanceUC,
+		departForPickupUC,
+		beginOutboundUC,
+		reachOutboundUC,
+		resolveOutboundUC,
+		scheduleReturnUC,
+		startReturnUC,
+		beginReturnUC,
+		reachFinalUC,
+		completeLongDistanceUC,
+		cancelTripUC,
 	)
 
 	eventHandler := handlers.NewTripEventHandler(getTripHistoryUC)

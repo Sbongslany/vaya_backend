@@ -18,20 +18,23 @@ type AcceptTripOfferInput struct {
 }
 
 type AcceptTripOffer struct {
-	tripRepo      repositories.TripRepository
-	tripOfferRepo repositories.TripOfferRepository
-	stateMachine  *services.StateMachine
+	tripRepo           repositories.TripRepository
+	tripOfferRepo      repositories.TripOfferRepository
+	stateMachine       *services.StateMachine
+	driverStateManager services.DriverStateManager
 }
 
 func NewAcceptTripOffer(
 	tripRepo repositories.TripRepository,
 	tripOfferRepo repositories.TripOfferRepository,
 	stateMachine *services.StateMachine,
+	driverStateManager services.DriverStateManager,
 ) *AcceptTripOffer {
 	return &AcceptTripOffer{
-		tripRepo:      tripRepo,
-		tripOfferRepo: tripOfferRepo,
-		stateMachine:  stateMachine,
+		tripRepo:           tripRepo,
+		tripOfferRepo:      tripOfferRepo,
+		stateMachine:       stateMachine,
+		driverStateManager: driverStateManager,
 	}
 }
 
@@ -82,6 +85,11 @@ func (uc *AcceptTripOffer) Execute(ctx context.Context, input AcceptTripOfferInp
 
 	if err := uc.tripOfferRepo.RejectOthersForTrip(ctx, input.TripID, offer.ID); err != nil {
 		return nil, err
+	}
+
+	// Mark driver as BUSY so they stop appearing in nearby driver searches
+	if uc.driverStateManager != nil {
+		_ = uc.driverStateManager.MarkBusy(ctx, offer.DriverID.String())
 	}
 
 	trip.DriverID = &offer.DriverID

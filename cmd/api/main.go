@@ -17,12 +17,12 @@ import (
 	"github.com/yourorg/ehailing/backend/internal/auth/dependency"
 	"github.com/yourorg/ehailing/backend/internal/config"
 	"github.com/yourorg/ehailing/backend/internal/database"
+	driverDep "github.com/yourorg/ehailing/backend/internal/driver/dependency" // <-- ADD THIS
 	httpapi "github.com/yourorg/ehailing/backend/internal/httpapi"
 	"github.com/yourorg/ehailing/backend/internal/logger"
 	promoDep "github.com/yourorg/ehailing/backend/internal/promotions/dependency"
 	tripDep "github.com/yourorg/ehailing/backend/internal/trip/dependency"
 	"github.com/yourorg/ehailing/backend/migrations"
-
 )
 
 func main() {
@@ -87,8 +87,9 @@ func main() {
 	promosContainer := promoDep.WirePromotions(pgPool)
 
 	// Wire trip dependencies (now passes promosContainer)
-	tripContainer := tripDep.WireTrip(pgPool, promosContainer)
+	tripContainer := tripDep.WireTrip(pgPool, promosContainer, redisClient)
 
+	driverContainer := driverDep.WireDriver(redisClient)
 
 	// Create HTTP router.
 	engine := httpapi.NewRouter(
@@ -97,8 +98,9 @@ func main() {
 		redisClient,
 		cfg,
 		authContainer,
-		tripContainer, // <-- ADD THIS LINE
+		tripContainer,   // <-- ADD THIS LINE
 		promosContainer, // <-- ADD THIS
+		driverContainer,
 	)
 
 	// Configure HTTP server.

@@ -13,8 +13,9 @@ import (
 	"github.com/yourorg/ehailing/backend/internal/config"
 	"github.com/yourorg/ehailing/backend/internal/http/handlers"
 	"github.com/yourorg/ehailing/backend/internal/http/middleware"
-	tripDep "github.com/yourorg/ehailing/backend/internal/trip/dependency"
 	promoDep "github.com/yourorg/ehailing/backend/internal/promotions/dependency"
+	tripDep "github.com/yourorg/ehailing/backend/internal/trip/dependency"
+	driverDep "github.com/yourorg/ehailing/backend/internal/driver/dependency"
 )
 
 func NewRouter(
@@ -25,6 +26,7 @@ func NewRouter(
 	authContainer *dependency.AuthContainer,
 	tripContainer *tripDep.TripContainer, // <-- ADD THIS LINE
 	promosContainer *promoDep.PromotionsContainer, // <-- ADD THIS
+	driverContainer *driverDep.DriverContainer, // <-- ADD THIS LINE
 
 
 ) *gin.Engine {
@@ -206,6 +208,16 @@ func NewRouter(
 		adminPromos.PUT("/:id", promosContainer.AdminHandler.UpdatePromotion)
 		adminPromos.POST("/:id/activate", promosContainer.AdminHandler.ActivatePromotion)
 		adminPromos.POST("/:id/pause", promosContainer.AdminHandler.PausePromotion)
+	}
+
+	// Driver Realtime & State Routes (protected)
+	driverState := engine.Group("/api/v1/driver")
+	driverState.Use(authContainer.Middleware.Authenticate())
+	{
+		driverState.POST("/online", driverContainer.Handler.GoOnline)
+		driverState.POST("/offline", driverContainer.Handler.GoOffline)
+		driverState.POST("/location", driverContainer.Handler.UpdateLocation)
+		driverState.GET("/nearby", driverContainer.Handler.GetNearbyDrivers)
 	}
 	// ==========================================
 	// OPENAPI DOCUMENTATION (Only registered once)

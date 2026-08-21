@@ -1,0 +1,5 @@
+-- +goose Up
+ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE';
+
+-- +goose Down
+ALTER TABLE auth.users DROP COLUMN IF EXISTS status;

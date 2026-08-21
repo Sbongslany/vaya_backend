@@ -26,6 +26,7 @@ import (
 	tripDep "github.com/yourorg/ehailing/backend/internal/trip/dependency"
 	walletDep "github.com/yourorg/ehailing/backend/internal/wallet/dependency"
 	"github.com/yourorg/ehailing/backend/migrations"
+	adminDep "github.com/yourorg/ehailing/backend/internal/admin/dependency"
 )
 
 func main() {
@@ -93,7 +94,9 @@ func main() {
 
 	chatContainer := chatDep.WireChat(pgPool)
 
-	upportContainer := supportDep.WireSupport(pgPool, walletContainer)
+	supportContainer := supportDep.WireSupport(pgPool, walletContainer)
+
+	adminContainer := adminDep.WireAdmin(pgPool)
 
 	// Wire trip dependencies (now passes promosContainer)
 	tripContainer := tripDep.WireTrip(
@@ -119,7 +122,8 @@ func main() {
 		driverContainer,
 		walletContainer,
 		chatContainer,
-		upportContainer,
+		supportContainer,
+		adminContainer,
 	)
 
 	// Configure HTTP server.

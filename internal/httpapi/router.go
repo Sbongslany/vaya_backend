@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	adminDep "github.com/yourorg/ehailing/backend/internal/admin/dependency"
 	"github.com/yourorg/ehailing/backend/internal/auth/dependency"
 	chatDep "github.com/yourorg/ehailing/backend/internal/chat/dependency"
 	"github.com/yourorg/ehailing/backend/internal/config"
@@ -33,6 +34,7 @@ func NewRouter(
 	walletContainer *walletDep.WalletContainer,
 	chatContainer *chatDep.ChatContainer,
 	supportContainer *supportDep.SupportContainer,
+	adminContainer *adminDep.AdminContainer,
 ) *gin.Engine {
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -303,6 +305,22 @@ func NewRouter(
 	adminSupportRoutes.Use(authContainer.Middleware.Authenticate())
 	{
 		adminSupportRoutes.POST("/tickets/:ticketId/resolve", supportContainer.Handler.ResolveTicket)
+	}
+
+	// ==========================================
+	// ADMIN DASHBOARD ROUTES (Protected + Admin Role)
+	// ==========================================
+	adminDashboard := engine.Group("/api/v1/admin/dashboard")
+	adminDashboard.Use(
+		authContainer.Middleware.Authenticate(),
+		authContainer.AdminMiddleware.RequireAdmin(),
+	)
+	{
+		adminDashboard.GET("/overview", adminContainer.Handler.GetPlatformOverview)
+		adminDashboard.GET("/financials", adminContainer.Handler.GetFinancialSummary)
+		adminDashboard.GET("/users", adminContainer.Handler.ListUsers)
+		adminDashboard.PATCH("/users/:userId/status", adminContainer.Handler.UpdateUserStatus)
+		adminDashboard.GET("/trips", adminContainer.Handler.ListAllTrips)
 	}
 
 	// ==========================================

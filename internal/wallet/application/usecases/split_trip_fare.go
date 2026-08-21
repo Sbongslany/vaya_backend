@@ -13,15 +13,15 @@ import (
 )
 
 type SplitTripFareInput struct {
-	TripID     uuid.UUID
+	TripID      uuid.UUID
 	PassengerID uuid.UUID
-	DriverID   uuid.UUID
-	Fare       float64
+	DriverID    uuid.UUID
+	Fare        float64
 }
 
 type SplitTripFare struct {
-	walletRepo   repositories.WalletRepository
-	ledgerRepo   repositories.LedgerRepository
+	walletRepo    repositories.WalletRepository
+	ledgerRepo    repositories.LedgerRepository
 	commissionSvc *services.CommissionService
 }
 
@@ -31,10 +31,35 @@ func NewSplitTripFare(
 	commissionSvc *services.CommissionService,
 ) *SplitTripFare {
 	return &SplitTripFare{
-		walletRepo:   walletRepo,
-		ledgerRepo:   ledgerRepo,
+		walletRepo:    walletRepo,
+		ledgerRepo:    ledgerRepo,
 		commissionSvc: commissionSvc,
 	}
+}
+
+// getOrCreateWallet ensures a wallet exists for the user (auto-creates if missing)
+func (uc *SplitTripFare) getOrCreateWallet(ctx context.Context, userID uuid.UUID) (*entities.Wallet, error) {
+	wallet, err := uc.walletRepo.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if wallet != nil {
+		return wallet, nil
+	}
+
+	now := time.Now()
+	wallet = &entities.Wallet{
+		ID:        uuid.New(),
+		UserID:    userID,
+		Balance:   0,
+		Currency:  "ZAR",
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := uc.walletRepo.Create(ctx, wallet); err != nil {
+		return nil, err
+	}
+	return wallet, nil
 }
 
 func (uc *SplitTripFare) Execute(ctx context.Context, input SplitTripFareInput) error {
@@ -46,12 +71,9 @@ func (uc *SplitTripFare) Execute(ctx context.Context, input SplitTripFareInput) 
 	now := time.Now()
 
 	// 1. Credit driver wallet
-	driverWallet, err := uc.walletRepo.GetByUserID(ctx, input.DriverID)
+	driverWallet, err := uc.getOrCreateWallet(ctx, input.DriverID)
 	if err != nil {
 		return err
-	}
-	if driverWallet == nil {
-		return domain.ErrWalletNotFound
 	}
 
 	driverNewBalance := driverWallet.Balance + driverEarnings
@@ -76,30 +98,32 @@ func (uc *SplitTripFare) Execute(ctx context.Context, input SplitTripFareInput) 
 	}
 
 	// 2. Credit platform wallet with commission
-	platformWallet, err := uc.walletRepo.GetPlatformWallet(ctx)
-	if err != nil {
-		return err
-	}
-	if platformWallet != nil && commission > 0 {
-		platformNewBalance := platformWallet.Balance + commission
-		if err := uc.walletRepo.UpdateBalance(ctx, platformWallet.ID, platformNewBalance); err != nil {
+	if commission > 0 {
+		platformWallet, err := uc.walletRepo.GetPlatformWallet(ctx)
+		if err != nil {
 			return err
 		}
+		if platformWallet != nil {
+			platformNewBalance := platformWallet.Balance + commission
+			if err := uc.walletRepo.UpdateBalance(ctx, platformWallet.ID, platformNewBalance); err != nil {
+				return err
+			}
 
-		commRefType := entities.RefPlatformCommission
-		platformEntry := &entities.LedgerEntry{
-			ID:            uuid.New(),
-			WalletID:      platformWallet.ID,
-			EntryType:     entities.LedgerEntryCredit,
-			Amount:        commission,
-			BalanceAfter:  platformNewBalance,
-			ReferenceType: &commRefType,
-			ReferenceID:   &input.TripID,
-			Description:   "Platform commission",
-			CreatedAt:     now,
-		}
-		if err := uc.ledgerRepo.Create(ctx, platformEntry); err != nil {
-			return err
+			commRefType := entities.RefPlatformCommission
+			platformEntry := &entities.LedgerEntry{
+				ID:            uuid.New(),
+				WalletID:      platformWallet.ID,
+				EntryType:     entities.LedgerEntryCredit,
+				Amount:        commission,
+				BalanceAfter:  platformNewBalance,
+				ReferenceType: &commRefType,
+				ReferenceID:   &input.TripID,
+				Description:   "Platform commission",
+				CreatedAt:     now,
+			}
+			if err := uc.ledgerRepo.Create(ctx, platformEntry); err != nil {
+				return err
+			}
 		}
 	}
 

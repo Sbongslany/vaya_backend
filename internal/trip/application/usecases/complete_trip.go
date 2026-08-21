@@ -20,17 +20,20 @@ type CompleteTrip struct {
 	tripRepo           repositories.TripRepository
 	stateMachine       *services.StateMachine
 	driverStateManager services.DriverStateManager
+	fareSplitter       services.FareSplitter
 }
 
 func NewCompleteTrip(
 	tripRepo repositories.TripRepository,
 	stateMachine *services.StateMachine,
 	driverStateManager services.DriverStateManager,
+	fareSplitter services.FareSplitter,
 ) *CompleteTrip {
 	return &CompleteTrip{
 		tripRepo:           tripRepo,
 		stateMachine:       stateMachine,
 		driverStateManager: driverStateManager,
+		fareSplitter:       fareSplitter,
 	}
 }
 
@@ -51,7 +54,7 @@ func (uc *CompleteTrip) Execute(ctx context.Context, input CompleteTripInput) (*
 		return nil, domain.ErrInvalidStateTransition
 	}
 
-	// Use estimated fare as final fare (will be enhanced with GPS tracking later)
+	// Use final fare if set, otherwise use estimated fare
 	finalFare := trip.EstimatedFare
 	if trip.FinalFare != nil {
 		finalFare = *trip.FinalFare
@@ -64,6 +67,11 @@ func (uc *CompleteTrip) Execute(ctx context.Context, input CompleteTripInput) (*
 	// Mark driver as ONLINE so they can receive new trips
 	if trip.DriverID != nil && uc.driverStateManager != nil {
 		_ = uc.driverStateManager.MarkOnline(ctx, trip.DriverID.String())
+	}
+
+	// Automatically split the fare into wallets (Driver gets 80%, Platform gets 20%)
+	if uc.fareSplitter != nil && finalFare > 0 {
+		_ = uc.fareSplitter.SplitFare(ctx, trip.ID, trip.PassengerID, input.DriverID, finalFare)
 	}
 
 	trip.Status = entities.StatusTripCompleted

@@ -22,8 +22,8 @@ import (
 	"github.com/yourorg/ehailing/backend/internal/logger"
 	promoDep "github.com/yourorg/ehailing/backend/internal/promotions/dependency"
 	tripDep "github.com/yourorg/ehailing/backend/internal/trip/dependency"
-	"github.com/yourorg/ehailing/backend/migrations"
 	walletDep "github.com/yourorg/ehailing/backend/internal/wallet/dependency"
+	"github.com/yourorg/ehailing/backend/migrations"
 )
 
 func main() {
@@ -84,15 +84,15 @@ func main() {
 	// Wire authentication dependencies.
 	authContainer := dependency.WireAuth(pgPool, redisClient, cfg, log)
 
+	walletContainer := walletDep.WireWallet(pgPool)
+
 	// Wire promotions dependencies
 	promosContainer := promoDep.WirePromotions(pgPool)
 
 	// Wire trip dependencies (now passes promosContainer)
-	tripContainer := tripDep.WireTrip(pgPool, promosContainer, redisClient)
+	tripContainer := tripDep.WireTrip(pgPool, promosContainer, redisClient, walletContainer)
 
 	driverContainer := driverDep.WireDriver(redisClient)
-
-	walletContainer := walletDep.WireWallet(pgPool)
 
 	// Create HTTP router.
 	engine := httpapi.NewRouter(

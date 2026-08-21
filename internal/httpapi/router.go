@@ -25,11 +25,10 @@ func NewRouter(
 	redisClient *redis.Client,
 	cfg *config.Config,
 	authContainer *dependency.AuthContainer,
-	tripContainer *tripDep.TripContainer, // <-- ADD THIS LINE
-	promosContainer *promoDep.PromotionsContainer, // <-- ADD THIS
-	driverContainer *driverDep.DriverContainer, // <-- ADD THIS LINE
-	walletContainer *walletDep.WalletContainer, // <-- ADD THIS LINE
-
+	tripContainer *tripDep.TripContainer,
+	promosContainer *promoDep.PromotionsContainer,
+	driverContainer *driverDep.DriverContainer,
+	walletContainer *walletDep.WalletContainer,
 ) *gin.Engine {
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -150,12 +149,14 @@ func NewRouter(
 		driver.POST("/onboarding/vehicle", authContainer.DriverHandler.CreateVehicle)
 		driver.GET("/onboarding/status", authContainer.DriverHandler.GetOnboardingStatus)
 
-		// Document Upload Routes (NEW)
+		// Document Upload Routes
 		driver.GET("/onboarding/documents/signature", authContainer.DriverHandler.GetUploadSignature)
 		driver.POST("/onboarding/documents", authContainer.DriverHandler.SubmitDocument)
 	}
 
-	// Trip Routes (protected)
+	// ==========================================
+	// TRIP ROUTES (Protected)
+	// ==========================================
 	trips := engine.Group("/api/v1/trips")
 	trips.Use(authContainer.Middleware.Authenticate())
 	{
@@ -174,6 +175,7 @@ func NewRouter(
 		trips.POST("/:id/pay", tripContainer.Handler.ProcessPayment)
 		trips.POST("/:id/rate", tripContainer.Handler.SubmitRating)
 		trips.POST("/:id/cancel", tripContainer.Handler.CancelTrip)
+
 		// Long-distance execution (outbound)
 		trips.POST("/:id/long-distance/publish", tripContainer.Handler.PublishLongDistanceTrip)
 		trips.POST("/:id/long-distance/confirm", tripContainer.Handler.ConfirmLongDistanceAssignment)
@@ -182,25 +184,36 @@ func NewRouter(
 		trips.POST("/:id/long-distance/outbound/begin", tripContainer.Handler.BeginOutbound)
 		trips.POST("/:id/long-distance/outbound/arrive", tripContainer.Handler.ReachOutboundDestination)
 		trips.POST("/:id/long-distance/outbound/resolve", tripContainer.Handler.ResolveOutboundArrival)
+
 		// Long-distance execution (return)
 		trips.POST("/:id/long-distance/return/schedule", tripContainer.Handler.ScheduleReturn)
 		trips.POST("/:id/long-distance/return/start", tripContainer.Handler.StartReturn)
 		trips.POST("/:id/long-distance/return/begin", tripContainer.Handler.BeginReturnInProgress)
 		trips.POST("/:id/long-distance/return/arrive", tripContainer.Handler.ReachFinalDestination)
 		trips.POST("/:id/long-distance/return/complete", tripContainer.Handler.CompleteLongDistanceTrip)
+
+		// Events & History
 		trips.GET("/:id/events", tripContainer.EventHandler.GetTripHistory)
 		trips.GET("/:id/history", tripContainer.EventHandler.GetTripHistory)
+
+		// WebSocket & Devices
 		trips.GET("/ws", tripContainer.WSHandler.ServeWS)
 		trips.POST("/devices/token", tripContainer.DeviceHandler.RegisterToken)
+
+		// Ratings
 		trips.GET("/ratings/:userId", tripContainer.RatingHandler.GetUserRating)
+
 		// Promotions (passenger)
 		trips.POST("/promotions/validate", promosContainer.PassengerHandler.ValidatePromoCode)
 		trips.GET("/promotions/my-redemptions", promosContainer.PassengerHandler.GetMyRedemptions)
-		trips.POST("/:id/pay/initiate", tripContainer.PaymentHandler.InitiatePayment)
 
+		// Payment
+		trips.POST("/:id/pay/initiate", tripContainer.PaymentHandler.InitiatePayment)
 	}
 
-	// Admin Promotions Routes (protected + admin role)
+	// ==========================================
+	// ADMIN PROMOTIONS ROUTES (Protected + Admin Role)
+	// ==========================================
 	adminPromos := engine.Group("/api/v1/admin/promotions")
 	adminPromos.Use(authContainer.Middleware.Authenticate())
 	{
@@ -212,7 +225,9 @@ func NewRouter(
 		adminPromos.POST("/:id/pause", promosContainer.AdminHandler.PausePromotion)
 	}
 
-	// Driver Realtime & State Routes (protected)
+	// ==========================================
+	// DRIVER REALTIME & STATE ROUTES (Protected)
+	// ==========================================
 	driverState := engine.Group("/api/v1/driver")
 	driverState.Use(authContainer.Middleware.Authenticate())
 	{
@@ -222,25 +237,36 @@ func NewRouter(
 		driverState.GET("/nearby", driverContainer.Handler.GetNearbyDrivers)
 	}
 
-	// Wallet Routes (passenger/driver)
-	wallet := engine.Group("/api/v1/wallet")
-	wallet.Use(authContainer.Middleware.Authenticate())
-	{
-		wallet.GET("", walletContainer.Handler.GetMyWallet)
-		wallet.GET("/history", walletContainer.Handler.GetMyLedgerHistory)
-	}
-
-	// Admin Wallet Routes
-	adminWallet := engine.Group("/api/v1/admin/wallet")
-	adminWallet.Use(authContainer.Middleware.Authenticate())
-	{
-		adminWallet.POST("/topup", walletContainer.Handler.AdminTopup)
-	}
-
-	// Paystack Webhook (PUBLIC - no auth, Paystack calls this directly)
-	engine.POST("/api/v1/payments/paystack/webhook", tripContainer.PaymentHandler.HandlePaystackWebhook)
 	// ==========================================
-	// OPENAPI DOCUMENTATION (Only registered once)
+	// WALLET ROUTES (Protected)
+	// ==========================================
+	walletRoutes := engine.Group("/api/v1/wallet")
+	walletRoutes.Use(authContainer.Middleware.Authenticate())
+	{
+		walletRoutes.GET("", walletContainer.Handler.GetMyWallet)
+		walletRoutes.GET("/history", walletContainer.Handler.GetMyLedgerHistory)
+		walletRoutes.GET("/payouts", walletContainer.Handler.GetPayoutHistory)
+		walletRoutes.POST("/payouts/request", walletContainer.Handler.RequestPayout)
+		walletRoutes.GET("/banks", walletContainer.Handler.ListBanks)
+	}
+
+	// ==========================================
+	// ADMIN WALLET ROUTES (Protected + Admin Role)
+	// ==========================================
+	adminWalletRoutes := engine.Group("/api/v1/admin/wallet")
+	adminWalletRoutes.Use(authContainer.Middleware.Authenticate())
+	{
+		adminWalletRoutes.POST("/topup", walletContainer.Handler.AdminTopup)
+	}
+
+	// ==========================================
+	// PAYSTACK WEBHOOKS (PUBLIC - No Auth)
+	// ==========================================
+	engine.POST("/api/v1/payments/paystack/webhook", tripContainer.PaymentHandler.HandlePaystackWebhook)
+	engine.POST("/api/v1/payments/paystack/transfer-webhook", walletContainer.Handler.HandleTransferWebhook)
+
+	// ==========================================
+	// OPENAPI DOCUMENTATION
 	// ==========================================
 	engine.GET("/api/v1/docs/openapi.yaml", func(c *gin.Context) {
 		c.File("api/openapi/auth.yaml")

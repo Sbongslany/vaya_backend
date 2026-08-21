@@ -84,7 +84,7 @@ func main() {
 	// Wire authentication dependencies.
 	authContainer := dependency.WireAuth(pgPool, redisClient, cfg, log)
 
-	walletContainer := walletDep.WireWallet(pgPool)
+	walletContainer := walletDep.WireWallet(pgPool, cfg.PaystackSecretKey)
 
 	// Wire promotions dependencies
 	promosContainer := promoDep.WirePromotions(pgPool)

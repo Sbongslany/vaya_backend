@@ -23,6 +23,7 @@ import (
 	promoDep "github.com/yourorg/ehailing/backend/internal/promotions/dependency"
 	tripDep "github.com/yourorg/ehailing/backend/internal/trip/dependency"
 	"github.com/yourorg/ehailing/backend/migrations"
+	walletDep "github.com/yourorg/ehailing/backend/internal/wallet/dependency"
 )
 
 func main() {
@@ -91,6 +92,8 @@ func main() {
 
 	driverContainer := driverDep.WireDriver(redisClient)
 
+	walletContainer := walletDep.WireWallet(pgPool)
+
 	// Create HTTP router.
 	engine := httpapi.NewRouter(
 		log,
@@ -101,6 +104,7 @@ func main() {
 		tripContainer,   // <-- ADD THIS LINE
 		promosContainer, // <-- ADD THIS
 		driverContainer,
+		walletContainer,
 	)
 
 	// Configure HTTP server.

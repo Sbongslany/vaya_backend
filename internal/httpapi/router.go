@@ -11,11 +11,12 @@ import (
 
 	"github.com/yourorg/ehailing/backend/internal/auth/dependency"
 	"github.com/yourorg/ehailing/backend/internal/config"
+	driverDep "github.com/yourorg/ehailing/backend/internal/driver/dependency"
 	"github.com/yourorg/ehailing/backend/internal/http/handlers"
 	"github.com/yourorg/ehailing/backend/internal/http/middleware"
 	promoDep "github.com/yourorg/ehailing/backend/internal/promotions/dependency"
 	tripDep "github.com/yourorg/ehailing/backend/internal/trip/dependency"
-	driverDep "github.com/yourorg/ehailing/backend/internal/driver/dependency"
+	walletDep "github.com/yourorg/ehailing/backend/internal/wallet/dependency"
 )
 
 func NewRouter(
@@ -27,6 +28,7 @@ func NewRouter(
 	tripContainer *tripDep.TripContainer, // <-- ADD THIS LINE
 	promosContainer *promoDep.PromotionsContainer, // <-- ADD THIS
 	driverContainer *driverDep.DriverContainer, // <-- ADD THIS LINE
+	walletContainer *walletDep.WalletContainer, // <-- ADD THIS LINE
 
 
 ) *gin.Engine {
@@ -218,6 +220,21 @@ func NewRouter(
 		driverState.POST("/offline", driverContainer.Handler.GoOffline)
 		driverState.POST("/location", driverContainer.Handler.UpdateLocation)
 		driverState.GET("/nearby", driverContainer.Handler.GetNearbyDrivers)
+	}
+
+		// Wallet Routes (passenger/driver)
+	wallet := engine.Group("/api/v1/wallet")
+	wallet.Use(authContainer.Middleware.Authenticate())
+	{
+		wallet.GET("", walletContainer.Handler.GetMyWallet)
+		wallet.GET("/history", walletContainer.Handler.GetMyLedgerHistory)
+	}
+
+	// Admin Wallet Routes
+	adminWallet := engine.Group("/api/v1/admin/wallet")
+	adminWallet.Use(authContainer.Middleware.Authenticate())
+	{
+		adminWallet.POST("/topup", walletContainer.Handler.AdminTopup)
 	}
 	// ==========================================
 	// OPENAPI DOCUMENTATION (Only registered once)

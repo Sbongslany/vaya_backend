@@ -15,6 +15,7 @@ import (
 	"github.com/joho/godotenv"
 
 	"github.com/yourorg/ehailing/backend/internal/auth/dependency"
+	chatDep "github.com/yourorg/ehailing/backend/internal/chat/dependency"
 	"github.com/yourorg/ehailing/backend/internal/config"
 	"github.com/yourorg/ehailing/backend/internal/database"
 	driverDep "github.com/yourorg/ehailing/backend/internal/driver/dependency" // <-- ADD THIS
@@ -89,6 +90,8 @@ func main() {
 	// Wire promotions dependencies
 	promosContainer := promoDep.WirePromotions(pgPool)
 
+	chatContainer := chatDep.WireChat(pgPool)
+
 	// Wire trip dependencies (now passes promosContainer)
 	tripContainer := tripDep.WireTrip(
 		pgPool,
@@ -112,6 +115,7 @@ func main() {
 		promosContainer, // <-- ADD THIS
 		driverContainer,
 		walletContainer,
+		chatContainer,
 	)
 
 	// Configure HTTP server.

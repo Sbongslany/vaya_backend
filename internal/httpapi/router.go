@@ -10,6 +10,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/yourorg/ehailing/backend/internal/auth/dependency"
+	chatDep "github.com/yourorg/ehailing/backend/internal/chat/dependency"
 	"github.com/yourorg/ehailing/backend/internal/config"
 	driverDep "github.com/yourorg/ehailing/backend/internal/driver/dependency"
 	"github.com/yourorg/ehailing/backend/internal/http/handlers"
@@ -29,6 +30,7 @@ func NewRouter(
 	promosContainer *promoDep.PromotionsContainer,
 	driverContainer *driverDep.DriverContainer,
 	walletContainer *walletDep.WalletContainer,
+	chatContainer *chatDep.ChatContainer,
 ) *gin.Engine {
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -257,6 +259,24 @@ func NewRouter(
 	adminWalletRoutes.Use(authContainer.Middleware.Authenticate())
 	{
 		adminWalletRoutes.POST("/topup", walletContainer.Handler.AdminTopup)
+	}
+
+	// ==========================================
+	// CHAT & CALL ROUTES (Protected)
+	// ==========================================
+	chatRoutes := engine.Group("/api/v1/chat")
+	chatRoutes.Use(authContainer.Middleware.Authenticate())
+	{
+		chatRoutes.GET("/ws", chatContainer.Handler.ServeWS)
+		chatRoutes.GET("/:tripId/history", chatContainer.Handler.GetChatHistory)
+		chatRoutes.POST("/send", chatContainer.Handler.SendMessage)
+	}
+
+	callRoutes := engine.Group("/api/v1/calls")
+	callRoutes.Use(authContainer.Middleware.Authenticate())
+	{
+		callRoutes.POST("/initiate", chatContainer.Handler.InitiateCall)
+		callRoutes.POST("/:sessionId/status", chatContainer.Handler.UpdateCallStatus)
 	}
 
 	// ==========================================

@@ -20,6 +20,7 @@ import (
 	"github.com/yourorg/ehailing/backend/internal/config"
 	"github.com/yourorg/ehailing/backend/internal/database"
 	driverDep "github.com/yourorg/ehailing/backend/internal/driver/dependency" // <-- ADD THIS
+	geofenceDep "github.com/yourorg/ehailing/backend/internal/geofence/dependency"
 	httpapi "github.com/yourorg/ehailing/backend/internal/httpapi"
 	kycDep "github.com/yourorg/ehailing/backend/internal/kyc/dependency"
 	"github.com/yourorg/ehailing/backend/internal/logger"
@@ -101,6 +102,8 @@ func main() {
 
 	kycContainer := kycDep.WireKYC(pgPool)
 
+	geofenceContainer := geofenceDep.WireGeofence(pgPool)
+
 	// Wire trip dependencies (now passes promosContainer)
 	tripContainer := tripDep.WireTrip(
 		pgPool,
@@ -128,6 +131,7 @@ func main() {
 		supportContainer,
 		adminContainer,
 		kycContainer,
+		geofenceContainer,
 	)
 
 	// Configure HTTP server.

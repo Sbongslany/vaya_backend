@@ -14,6 +14,7 @@ import (
 	chatDep "github.com/yourorg/ehailing/backend/internal/chat/dependency"
 	"github.com/yourorg/ehailing/backend/internal/config"
 	driverDep "github.com/yourorg/ehailing/backend/internal/driver/dependency"
+	geofenceDep "github.com/yourorg/ehailing/backend/internal/geofence/dependency"
 	"github.com/yourorg/ehailing/backend/internal/http/handlers"
 	"github.com/yourorg/ehailing/backend/internal/http/middleware"
 	kycDep "github.com/yourorg/ehailing/backend/internal/kyc/dependency"
@@ -37,6 +38,7 @@ func NewRouter(
 	supportContainer *supportDep.SupportContainer,
 	adminContainer *adminDep.AdminContainer,
 	kycContainer *kycDep.KYCContainer,
+	geofenceContainer *geofenceDep.GeofenceContainer,
 ) *gin.Engine {
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -337,6 +339,30 @@ func NewRouter(
 		adminKYC.GET("/pending", kycContainer.Handler.ListPendingKYC)
 		adminKYC.GET("/drivers/:userId/documents", kycContainer.Handler.GetDriverDocuments)
 		adminKYC.POST("/documents/:documentId/review", kycContainer.Handler.ReviewDocument)
+	}
+
+	// ==========================================
+	// ADMIN GEOFENCE ROUTES (Protected + Admin Role)
+	// ==========================================
+	adminGeofence := engine.Group("/api/v1/admin/geofences")
+	adminGeofence.Use(
+		authContainer.Middleware.Authenticate(),
+		authContainer.AdminMiddleware.RequireAdmin(),
+	)
+	{
+		adminGeofence.POST("", geofenceContainer.Handler.CreateGeofence)
+		adminGeofence.GET("", geofenceContainer.Handler.ListGeofences)
+		adminGeofence.GET("/check", geofenceContainer.Handler.CheckLocation)
+	}
+
+	adminZones := engine.Group("/api/v1/admin/zones")
+	adminZones.Use(
+		authContainer.Middleware.Authenticate(),
+		authContainer.AdminMiddleware.RequireAdmin(),
+	)
+	{
+		adminZones.POST("/assign", geofenceContainer.Handler.AssignDriverToZone)
+		adminZones.DELETE("/drivers/:driverId/zones/:zoneId", geofenceContainer.Handler.RemoveDriverFromZone)
 	}
 
 	// ==========================================

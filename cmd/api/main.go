@@ -112,6 +112,9 @@ func main() {
 		walletContainer,
 		cfg.PaystackSecretKey,
 		cfg.PaystackCallbackURL,
+		cfg.RoutingProvider,
+		cfg.OSRMBaseURL,
+		cfg.GoogleMapsAPIKey,
 	)
 
 	driverContainer := driverDep.WireDriver(redisClient)
@@ -123,8 +126,8 @@ func main() {
 		redisClient,
 		cfg,
 		authContainer,
-		tripContainer,   // <-- ADD THIS LINE
-		promosContainer, // <-- ADD THIS
+		tripContainer,
+		promosContainer,
 		driverContainer,
 		walletContainer,
 		chatContainer,

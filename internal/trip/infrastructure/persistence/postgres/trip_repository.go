@@ -24,6 +24,7 @@ const tripColumns = `id, passenger_id, driver_id, vehicle_id, trip_type, status,
 	long_distance_type, scheduled_departure, scheduled_return, trip_duration_days,
 	cancellation_reason, cancelled_by, cancelled_at, cancellation_fee,
 	promotion_id, discount_amount,
+	route_polyline, route_duration_minutes, route_distance_km,
 	created_at, updated_at`
 
 func scanTrip(rs rowScanner) (*entities.Trip, error) {
@@ -34,7 +35,9 @@ func scanTrip(rs rowScanner) (*entities.Trip, error) {
 		&t.DropoffLatitude, &t.DropoffLongitude, &t.DropoffAddress,
 		&t.EstimatedFare, &t.FinalFare, &t.Currency, &t.DistanceKM,
 		&t.LongDistanceType, &t.ScheduledDeparture, &t.ScheduledReturn, &t.TripDurationDays,
-		&t.CancellationReason, &t.CancelledBy, &t.CancelledAt, &t.CancellationFee, &t.PromotionID, &t.DiscountAmount,
+		&t.CancellationReason, &t.CancelledBy, &t.CancelledAt, &t.CancellationFee,
+		&t.PromotionID, &t.DiscountAmount,
+		&t.RoutePolyline, &t.RouteDurationMinutes, &t.RouteDistanceKM,
 		&t.CreatedAt, &t.UpdatedAt,
 	); err != nil {
 		return nil, err
@@ -62,7 +65,7 @@ func (r *TripRepository) logEvent(ctx context.Context, tripID uuid.UUID, eventTy
 
 func (r *TripRepository) Create(ctx context.Context, trip *entities.Trip) error {
 	query := `INSERT INTO trips (` + tripColumns + `)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)`
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32)`
 
 	_, err := r.pool.Exec(ctx, query,
 		trip.ID, trip.PassengerID, trip.DriverID, trip.VehicleID, trip.TripType, trip.Status, trip.StartPIN,
@@ -72,6 +75,7 @@ func (r *TripRepository) Create(ctx context.Context, trip *entities.Trip) error 
 		trip.LongDistanceType, trip.ScheduledDeparture, trip.ScheduledReturn, trip.TripDurationDays,
 		trip.CancellationReason, trip.CancelledBy, trip.CancelledAt, trip.CancellationFee,
 		trip.PromotionID, trip.DiscountAmount,
+		trip.RoutePolyline, trip.RouteDurationMinutes, trip.RouteDistanceKM,
 		trip.CreatedAt, trip.UpdatedAt,
 	)
 	return err

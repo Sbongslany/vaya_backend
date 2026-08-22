@@ -73,35 +73,38 @@ const (
 )
 
 type Trip struct {
-	ID                 uuid.UUID
-	PassengerID        uuid.UUID
-	DriverID           *uuid.UUID
-	VehicleID          *uuid.UUID
-	TripType           TripType
-	Status             TripStatus
-	StartPIN           string
-	PickupLatitude     float64
-	PickupLongitude    float64
-	PickupAddress      string
-	DropoffLatitude    float64
-	DropoffLongitude   float64
-	DropoffAddress     string
-	EstimatedFare      float64
-	FinalFare          *float64
-	Currency           string
-	DistanceKM         *float64
-	LongDistanceType   *LongDistanceType
-	ScheduledDeparture *time.Time
-	ScheduledReturn    *time.Time
-	TripDurationDays   *int
-	CancellationReason *string
-	CancelledBy        *uuid.UUID
-	CancelledAt        *time.Time
-	CancellationFee    *float64
-	PromotionID        *uuid.UUID
-	DiscountAmount     float64
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
+	ID                   uuid.UUID
+	PassengerID          uuid.UUID
+	DriverID             *uuid.UUID
+	VehicleID            *uuid.UUID
+	TripType             TripType
+	Status               TripStatus
+	StartPIN             string
+	PickupLatitude       float64
+	PickupLongitude      float64
+	PickupAddress        string
+	DropoffLatitude      float64
+	DropoffLongitude     float64
+	DropoffAddress       string
+	EstimatedFare        float64
+	FinalFare            *float64
+	Currency             string
+	DistanceKM           *float64
+	LongDistanceType     *LongDistanceType
+	ScheduledDeparture   *time.Time
+	ScheduledReturn      *time.Time
+	TripDurationDays     *int
+	CancellationReason   *string
+	CancelledBy          *uuid.UUID
+	CancelledAt          *time.Time
+	CancellationFee      *float64
+	PromotionID          *uuid.UUID
+	DiscountAmount       float64
+	RoutePolyline        *string
+	RouteDurationMinutes *int
+	RouteDistanceKM      *float64
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 type TripOffer struct {

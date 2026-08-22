@@ -219,6 +219,9 @@ func NewRouter(
 
 		// Payment
 		trips.POST("/:id/pay/initiate", tripContainer.PaymentHandler.InitiatePayment)
+
+		trips.GET("/:id/route", tripContainer.Handler.GetTripRoute)
+		trips.POST("/route/calculate", tripContainer.Handler.CalculateRoute)
 	}
 
 	// ==========================================

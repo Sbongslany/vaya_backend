@@ -42,6 +42,8 @@ type TripHandler struct {
 	reachFinalDestination         *usecases.ReachFinalDestination
 	completeLongDistanceTrip      *usecases.CompleteLongDistanceTrip
 	cancelTrip                    *usecases.CancelTrip
+	calculateRouteUC              *usecases.CalculateRoute // <-- ADD THIS LINE
+
 }
 
 func NewTripHandler(
@@ -72,6 +74,8 @@ func NewTripHandler(
 	reachFinalDestination *usecases.ReachFinalDestination,
 	completeLongDistanceTrip *usecases.CompleteLongDistanceTrip,
 	cancelTrip *usecases.CancelTrip,
+	calculateRouteUC *usecases.CalculateRoute, // <-- ADD THIS LINE
+
 ) *TripHandler {
 	return &TripHandler{
 		createTrip:                    createTrip,
@@ -101,6 +105,8 @@ func NewTripHandler(
 		reachFinalDestination:         reachFinalDestination,
 		completeLongDistanceTrip:      completeLongDistanceTrip,
 		cancelTrip:                    cancelTrip,
+		calculateRouteUC:              calculateRouteUC, // <-- ADD THIS LINE
+
 	}
 }
 
@@ -1050,4 +1056,70 @@ func handleTripError(c *gin.Context, err error) {
 	default:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal_server_error"})
 	}
+}
+
+func (h *TripHandler) GetTripRoute(c *gin.Context) {
+	tripID, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_trip_id"})
+		return
+	}
+
+	// 👇 CHANGE h.getTripUC to h.getTrip (or whatever your field is named in the struct)
+	trip, err := h.getTrip.Execute(c.Request.Context(), tripID)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "trip_not_found"})
+		return
+	}
+
+	if trip.RoutePolyline == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"trip_id":  trip.ID,
+			"polyline": "",
+			"message":  "no_route_calculated_for_this_trip",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"trip_id":          trip.ID,
+		"polyline":         *trip.RoutePolyline,
+		"distance_km":      trip.RouteDistanceKM,
+		"duration_minutes": trip.RouteDurationMinutes,
+		"pickup":           map[string]float64{"lat": trip.PickupLatitude, "lng": trip.PickupLongitude},
+		"dropoff":          map[string]float64{"lat": trip.DropoffLatitude, "lng": trip.DropoffLongitude},
+	})
+}
+
+type CalculateRouteRequest struct {
+	FromLat float64 `json:"from_lat" binding:"required"`
+	FromLng float64 `json:"from_lng" binding:"required"`
+	ToLat   float64 `json:"to_lat" binding:"required"`
+	ToLng   float64 `json:"to_lng" binding:"required"`
+}
+
+func (h *TripHandler) CalculateRoute(c *gin.Context) {
+	var req CalculateRouteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+		return
+	}
+
+	result, err := h.calculateRouteUC.Execute(c.Request.Context(), usecases.CalculateRouteInput{
+		FromLat: req.FromLat,
+		FromLng: req.FromLng,
+		ToLat:   req.ToLat,
+		ToLng:   req.ToLng,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed_to_calculate_route"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"distance_km":      result.DistanceKM,
+		"duration_minutes": result.DurationMinutes,
+		"polyline":         result.Polyline,
+		"steps":            result.Steps,
+	})
 }

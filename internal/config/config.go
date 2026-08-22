@@ -41,6 +41,11 @@ type Config struct {
 	PaystackSecretKey   string
 	PaystackCallbackURL string
 	AppBaseURL          string
+
+	// Routing
+	RoutingProvider  string // "osrm", "google", or "haversine"
+	OSRMBaseURL      string
+	GoogleMapsAPIKey string
 }
 
 type PostgresConfig struct {
@@ -351,6 +356,10 @@ func Load() (*Config, error) {
 	// Build configuration
 	// -------------------------------------------------------------------------
 
+	routingProvider := getEnv("ROUTING_PROVIDER", "haversine")
+	osrmBaseURL := getEnv("OSRM_BASE_URL", "http://localhost:5000")
+	googleMapsAPIKey := getEnv("GOOGLE_MAPS_API_KEY", "")
+
 	cfg := &Config{
 		Env:                env,
 		HTTPPort:           httpPort,
@@ -403,6 +412,10 @@ func Load() (*Config, error) {
 		PaystackSecretKey:   paystackSecretKey,
 		PaystackCallbackURL: paystackCallbackURL,
 		AppBaseURL:          appBaseURL,
+
+		RoutingProvider:  routingProvider,
+		OSRMBaseURL:      osrmBaseURL,
+		GoogleMapsAPIKey: googleMapsAPIKey,
 	}
 
 	return cfg, nil

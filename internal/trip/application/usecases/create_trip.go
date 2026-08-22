@@ -23,14 +23,15 @@ type CreateTripInput struct {
 	DropoffLatitude  float64
 	DropoffLongitude float64
 	DropoffAddress   string
-	PromoCode        string // optional
+	PromoCode        string
 }
 
 type CreateTrip struct {
-	tripRepo      repositories.TripRepository
-	fareCalc      *services.FareCalculator
-	eventService  *services.TripEventService
-	promoRedeemer services.PromotionRedeemer
+	tripRepo       repositories.TripRepository
+	fareCalc       *services.FareCalculator
+	eventService   *services.TripEventService
+	promoRedeemer  services.PromotionRedeemer
+	routingService services.RoutingService
 }
 
 func NewCreateTrip(
@@ -38,12 +39,14 @@ func NewCreateTrip(
 	fareCalc *services.FareCalculator,
 	eventService *services.TripEventService,
 	promoRedeemer services.PromotionRedeemer,
+	routingService services.RoutingService,
 ) *CreateTrip {
 	return &CreateTrip{
-		tripRepo:      tripRepo,
-		fareCalc:      fareCalc,
-		eventService:  eventService,
-		promoRedeemer: promoRedeemer,
+		tripRepo:       tripRepo,
+		fareCalc:       fareCalc,
+		eventService:   eventService,
+		promoRedeemer:  promoRedeemer,
+		routingService: routingService,
 	}
 }
 
@@ -63,34 +66,52 @@ func (uc *CreateTrip) Execute(ctx context.Context, input CreateTripInput) (*enti
 		return nil, domain.ErrActiveTripExists
 	}
 
-	distanceKM := services.CalculateDistanceKM(
+	// Calculate actual road route
+	routeResult, err := uc.routingService.CalculateRoute(
+		ctx,
 		input.PickupLatitude, input.PickupLongitude,
 		input.DropoffLatitude, input.DropoffLongitude,
 	)
-	estimatedMinutes := int(distanceKM * 2)
-	estimatedFare := uc.fareCalc.Calculate(distanceKM, estimatedMinutes)
+	if err != nil {
+		// Fallback to Haversine if routing fails
+		distanceKM := services.CalculateDistanceKM(
+			input.PickupLatitude, input.PickupLongitude,
+			input.DropoffLatitude, input.DropoffLongitude,
+		)
+		estimatedMinutes := int(distanceKM * 2)
+
+		routeResult = &services.RouteResult{
+			DistanceKM:      distanceKM,
+			DurationMinutes: estimatedMinutes,
+		}
+	}
+
+	estimatedFare := uc.fareCalc.Calculate(routeResult.DistanceKM, routeResult.DurationMinutes)
 
 	now := time.Now()
 	tripID := uuid.New()
 
 	trip := &entities.Trip{
-		ID:               tripID,
-		PassengerID:      input.PassengerID,
-		TripType:         entities.TripTypeNormal,
-		Status:           entities.StatusRequested,
-		StartPIN:         generatePIN(),
-		PickupLatitude:   input.PickupLatitude,
-		PickupLongitude:  input.PickupLongitude,
-		PickupAddress:    input.PickupAddress,
-		DropoffLatitude:  input.DropoffLatitude,
-		DropoffLongitude: input.DropoffLongitude,
-		DropoffAddress:   input.DropoffAddress,
-		EstimatedFare:    estimatedFare,
-		Currency:         "ZAR",
-		DistanceKM:       &distanceKM,
-		DiscountAmount:   0,
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		ID:                   tripID,
+		PassengerID:          input.PassengerID,
+		TripType:             entities.TripTypeNormal,
+		Status:               entities.StatusRequested,
+		StartPIN:             generatePIN(),
+		PickupLatitude:       input.PickupLatitude,
+		PickupLongitude:      input.PickupLongitude,
+		PickupAddress:        input.PickupAddress,
+		DropoffLatitude:      input.DropoffLatitude,
+		DropoffLongitude:     input.DropoffLongitude,
+		DropoffAddress:       input.DropoffAddress,
+		EstimatedFare:        estimatedFare,
+		Currency:             "ZAR",
+		DistanceKM:           &routeResult.DistanceKM,
+		RoutePolyline:        &routeResult.Polyline,
+		RouteDurationMinutes: &routeResult.DurationMinutes,
+		RouteDistanceKM:      &routeResult.DistanceKM,
+		DiscountAmount:       0,
+		CreatedAt:            now,
+		UpdatedAt:            now,
 	}
 
 	// Apply promo code if provided
@@ -111,20 +132,19 @@ func (uc *CreateTrip) Execute(ctx context.Context, input CreateTripInput) (*enti
 	}
 
 	// Record trip created event
-	fromStatus := ""
-	toStatus := string(entities.StatusRequested)
 	_ = uc.eventService.Record(
 		ctx,
 		trip.ID,
 		entities.EventTypeTripCreated,
 		&input.PassengerID,
-		fromStatus,
-		toStatus,
+		"",
+		string(entities.StatusRequested),
 		map[string]interface{}{
 			"pickup_address":  input.PickupAddress,
 			"dropoff_address": input.DropoffAddress,
 			"estimated_fare":  trip.EstimatedFare,
-			"distance_km":     distanceKM,
+			"distance_km":     routeResult.DistanceKM,
+			"duration_min":    routeResult.DurationMinutes,
 		},
 	)
 

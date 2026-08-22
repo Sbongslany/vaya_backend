@@ -13,6 +13,7 @@ import (
 	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/notifications"
 	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/payment"
 	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/persistence/postgres"
+	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/routing"
 	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/websocket"
 	"github.com/yourorg/ehailing/backend/internal/trip/interfaces/http/handlers"
 	walletUseCases "github.com/yourorg/ehailing/backend/internal/wallet/application/usecases"
@@ -36,6 +37,9 @@ func WireTrip(
 	walletContainer *walletDep.WalletContainer,
 	paystackSecretKey string,
 	paystackCallbackURL string,
+	routingProvider string,
+	osrmBaseURL string,
+	googleMapsAPIKey string,
 ) *TripContainer {
 	// Repositories
 	tripRepo := postgres.NewTripRepository(pgPool)
@@ -49,6 +53,20 @@ func WireTrip(
 	// Domain services
 	fareCalc := services.NewFareCalculator()
 	stateMachine := services.NewStateMachine()
+
+	// Routing service (OSRM, Google Maps, or Haversine fallback)
+	var routingService services.RoutingService
+	switch routingProvider {
+	case "osrm":
+		routingService = routing.NewOSRMClient(osrmBaseURL)
+		log.Println("Using OSRM routing service")
+	case "google":
+		routingService = routing.NewGoogleMapsClient(googleMapsAPIKey)
+		log.Println("Using Google Maps routing service")
+	default:
+		routingService = routing.NewHaversineFallback()
+		log.Println("Using Haversine fallback routing")
+	}
 
 	// Paystack service
 	paystackService := payment.NewPaystackService(paystackSecretKey)
@@ -82,8 +100,9 @@ func WireTrip(
 	// Wallet balance use case (for wallet payments)
 	walletPostgresRepo := walletPostgres.NewWalletRepository(pgPool)
 	walletBalanceUC := walletUseCases.NewGetWallet(walletPostgresRepo)
+
 	// Use cases — normal trip
-	createTripUC := usecases.NewCreateTrip(tripRepo, fareCalc, eventService, promoRedeemer)
+	createTripUC := usecases.NewCreateTrip(tripRepo, fareCalc, eventService, promoRedeemer, routingService)
 	getTripUC := usecases.NewGetTrip(tripRepo)
 	getNearbyTripsUC := usecases.NewGetNearbyTrips(tripRepo)
 	submitOfferUC := usecases.NewSubmitTripOffer(tripRepo, tripOfferRepo, stateMachine)
@@ -96,6 +115,7 @@ func WireTrip(
 	paymentProvider := payment.NewDefaultPaymentProvider()
 	processPaymentUC := usecases.NewProcessPayment(tripRepo, paymentRepo, paymentProvider, stateMachine)
 	submitRatingUC := usecases.NewSubmitRating(tripRepo, ratingRepo, userRatingRepo, stateMachine, eventService)
+	calculateRouteUC := usecases.NewCalculateRoute(routingService)
 
 	// Use cases — long-distance trip
 	createLongDistanceUC := usecases.NewCreateLongDistanceTrip(tripRepo, fareCalc)
@@ -134,7 +154,7 @@ func WireTrip(
 		processPaymentUC, submitRatingUC, createLongDistanceUC, getOpenLongDistanceUC,
 		publishLongDistanceUC, confirmLongDistanceUC, scheduleLongDistanceUC, departForPickupUC,
 		beginOutboundUC, reachOutboundUC, resolveOutboundUC, scheduleReturnUC, startReturnUC,
-		beginReturnUC, reachFinalUC, completeLongDistanceUC, cancelTripUC,
+		beginReturnUC, reachFinalUC, completeLongDistanceUC, cancelTripUC, calculateRouteUC,
 	)
 
 	eventHandler := handlers.NewTripEventHandler(getTripHistoryUC)

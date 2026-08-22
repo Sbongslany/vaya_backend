@@ -103,6 +103,7 @@ type Trip struct {
 	RoutePolyline        *string
 	RouteDurationMinutes *int
 	RouteDistanceKM      *float64
+	SurgeMultiplier      *float64
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 }

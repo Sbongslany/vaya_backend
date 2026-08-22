@@ -222,6 +222,9 @@ func NewRouter(
 
 		trips.GET("/:id/route", tripContainer.Handler.GetTripRoute)
 		trips.POST("/route/calculate", tripContainer.Handler.CalculateRoute)
+
+		trips.GET("/surge", tripContainer.Handler.GetSurgeMultiplier)
+		trips.GET("/surge/heatmap", tripContainer.Handler.GetSurgeHeatmap)
 	}
 
 	// ==========================================

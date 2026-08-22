@@ -32,6 +32,7 @@ type CreateTrip struct {
 	eventService   *services.TripEventService
 	promoRedeemer  services.PromotionRedeemer
 	routingService services.RoutingService
+	surgeService   services.SurgeService
 }
 
 func NewCreateTrip(
@@ -40,6 +41,7 @@ func NewCreateTrip(
 	eventService *services.TripEventService,
 	promoRedeemer services.PromotionRedeemer,
 	routingService services.RoutingService,
+	surgeService services.SurgeService,
 ) *CreateTrip {
 	return &CreateTrip{
 		tripRepo:       tripRepo,
@@ -47,6 +49,7 @@ func NewCreateTrip(
 		eventService:   eventService,
 		promoRedeemer:  promoRedeemer,
 		routingService: routingService,
+		surgeService:   surgeService,
 	}
 }
 
@@ -73,7 +76,6 @@ func (uc *CreateTrip) Execute(ctx context.Context, input CreateTripInput) (*enti
 		input.DropoffLatitude, input.DropoffLongitude,
 	)
 	if err != nil {
-		// Fallback to Haversine if routing fails
 		distanceKM := services.CalculateDistanceKM(
 			input.PickupLatitude, input.PickupLongitude,
 			input.DropoffLatitude, input.DropoffLongitude,
@@ -86,7 +88,22 @@ func (uc *CreateTrip) Execute(ctx context.Context, input CreateTripInput) (*enti
 		}
 	}
 
-	estimatedFare := uc.fareCalc.Calculate(routeResult.DistanceKM, routeResult.DurationMinutes)
+	baseFare := uc.fareCalc.Calculate(routeResult.DistanceKM, routeResult.DurationMinutes)
+
+	// Apply surge multiplier
+	surgeMultiplier := 1.0
+	if uc.surgeService != nil {
+		// Record this request as demand
+		_ = uc.surgeService.RecordDemand(ctx, input.PickupLatitude, input.PickupLongitude)
+
+		// Get current multiplier for this zone
+		multiplier, err := uc.surgeService.GetMultiplier(ctx, input.PickupLatitude, input.PickupLongitude)
+		if err == nil && multiplier > 1.0 {
+			surgeMultiplier = multiplier
+		}
+	}
+
+	estimatedFare := baseFare * surgeMultiplier
 
 	now := time.Now()
 	tripID := uuid.New()
@@ -109,6 +126,7 @@ func (uc *CreateTrip) Execute(ctx context.Context, input CreateTripInput) (*enti
 		RoutePolyline:        &routeResult.Polyline,
 		RouteDurationMinutes: &routeResult.DurationMinutes,
 		RouteDistanceKM:      &routeResult.DistanceKM,
+		SurgeMultiplier:      &surgeMultiplier,
 		DiscountAmount:       0,
 		CreatedAt:            now,
 		UpdatedAt:            now,
@@ -140,11 +158,12 @@ func (uc *CreateTrip) Execute(ctx context.Context, input CreateTripInput) (*enti
 		"",
 		string(entities.StatusRequested),
 		map[string]interface{}{
-			"pickup_address":  input.PickupAddress,
-			"dropoff_address": input.DropoffAddress,
-			"estimated_fare":  trip.EstimatedFare,
-			"distance_km":     routeResult.DistanceKM,
-			"duration_min":    routeResult.DurationMinutes,
+			"pickup_address":   input.PickupAddress,
+			"dropoff_address":  input.DropoffAddress,
+			"estimated_fare":   trip.EstimatedFare,
+			"distance_km":      routeResult.DistanceKM,
+			"duration_min":     routeResult.DurationMinutes,
+			"surge_multiplier": surgeMultiplier,
 		},
 	)
 

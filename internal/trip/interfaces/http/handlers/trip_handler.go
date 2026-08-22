@@ -43,7 +43,8 @@ type TripHandler struct {
 	completeLongDistanceTrip      *usecases.CompleteLongDistanceTrip
 	cancelTrip                    *usecases.CancelTrip
 	calculateRouteUC              *usecases.CalculateRoute // <-- ADD THIS LINE
-
+	getSurgeMultiplierUC          *usecases.GetSurgeMultiplier
+	getSurgeHeatmapUC             *usecases.GetSurgeHeatmap
 }
 
 func NewTripHandler(
@@ -75,6 +76,8 @@ func NewTripHandler(
 	completeLongDistanceTrip *usecases.CompleteLongDistanceTrip,
 	cancelTrip *usecases.CancelTrip,
 	calculateRouteUC *usecases.CalculateRoute, // <-- ADD THIS LINE
+	getSurgeMultiplierUC *usecases.GetSurgeMultiplier,
+	getSurgeHeatmapUC *usecases.GetSurgeHeatmap,
 
 ) *TripHandler {
 	return &TripHandler{
@@ -1122,4 +1125,42 @@ func (h *TripHandler) CalculateRoute(c *gin.Context) {
 		"polyline":         result.Polyline,
 		"steps":            result.Steps,
 	})
+}
+
+func (h *TripHandler) GetSurgeMultiplier(c *gin.Context) {
+	latStr := c.Query("lat")
+	lngStr := c.Query("lng")
+
+	lat, err := strconv.ParseFloat(latStr, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_lat"})
+		return
+	}
+	lng, err := strconv.ParseFloat(lngStr, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_lng"})
+		return
+	}
+
+	multiplier, err := h.getSurgeMultiplierUC.Execute(c.Request.Context(), lat, lng)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed_to_get_surge"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"lat":        lat,
+		"lng":        lng,
+		"multiplier": multiplier,
+	})
+}
+
+func (h *TripHandler) GetSurgeHeatmap(c *gin.Context) {
+	zones, err := h.getSurgeHeatmapUC.Execute(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed_to_get_heatmap"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"zones": zones})
 }

@@ -8,17 +8,18 @@ import (
 
 	driverRedis "github.com/yourorg/ehailing/backend/internal/driver/infrastructure/persistence/redis"
 	promoDep "github.com/yourorg/ehailing/backend/internal/promotions/dependency"
+	walletDep "github.com/yourorg/ehailing/backend/internal/wallet/dependency"
+	walletUseCases "github.com/yourorg/ehailing/backend/internal/wallet/application/usecases"
+	walletPostgres "github.com/yourorg/ehailing/backend/internal/wallet/infrastructure/persistence/postgres"
 	"github.com/yourorg/ehailing/backend/internal/trip/application/usecases"
 	"github.com/yourorg/ehailing/backend/internal/trip/domain/services"
 	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/notifications"
 	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/payment"
 	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/persistence/postgres"
 	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/routing"
+	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/surge"
 	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/websocket"
 	"github.com/yourorg/ehailing/backend/internal/trip/interfaces/http/handlers"
-	walletUseCases "github.com/yourorg/ehailing/backend/internal/wallet/application/usecases"
-	walletDep "github.com/yourorg/ehailing/backend/internal/wallet/dependency"
-	walletPostgres "github.com/yourorg/ehailing/backend/internal/wallet/infrastructure/persistence/postgres"
 )
 
 type TripContainer struct {
@@ -54,7 +55,7 @@ func WireTrip(
 	fareCalc := services.NewFareCalculator()
 	stateMachine := services.NewStateMachine()
 
-	// Routing service (OSRM, Google Maps, or Haversine fallback)
+	// Routing service
 	var routingService services.RoutingService
 	switch routingProvider {
 	case "osrm":
@@ -67,6 +68,9 @@ func WireTrip(
 		routingService = routing.NewHaversineFallback()
 		log.Println("Using Haversine fallback routing")
 	}
+
+	// Surge pricing service
+	surgeService := surge.NewRedisSurgeService(redisClient)
 
 	// Paystack service
 	paystackService := payment.NewPaystackService(paystackSecretKey)
@@ -97,12 +101,12 @@ func WireTrip(
 		fareSplitter = walletDep.NewFareSplitterAdapter(walletContainer.SplitTripFare)
 	}
 
-	// Wallet balance use case (for wallet payments)
+	// Wallet balance use case
 	walletPostgresRepo := walletPostgres.NewWalletRepository(pgPool)
 	walletBalanceUC := walletUseCases.NewGetWallet(walletPostgresRepo)
 
 	// Use cases — normal trip
-	createTripUC := usecases.NewCreateTrip(tripRepo, fareCalc, eventService, promoRedeemer, routingService)
+	createTripUC := usecases.NewCreateTrip(tripRepo, fareCalc, eventService, promoRedeemer, routingService, surgeService)
 	getTripUC := usecases.NewGetTrip(tripRepo)
 	getNearbyTripsUC := usecases.NewGetNearbyTrips(tripRepo)
 	submitOfferUC := usecases.NewSubmitTripOffer(tripRepo, tripOfferRepo, stateMachine)
@@ -116,6 +120,8 @@ func WireTrip(
 	processPaymentUC := usecases.NewProcessPayment(tripRepo, paymentRepo, paymentProvider, stateMachine)
 	submitRatingUC := usecases.NewSubmitRating(tripRepo, ratingRepo, userRatingRepo, stateMachine, eventService)
 	calculateRouteUC := usecases.NewCalculateRoute(routingService)
+	getSurgeMultiplierUC := usecases.NewGetSurgeMultiplier(surgeService)
+	getSurgeHeatmapUC := usecases.NewGetSurgeHeatmap(surgeService)
 
 	// Use cases — long-distance trip
 	createLongDistanceUC := usecases.NewCreateLongDistanceTrip(tripRepo, fareCalc)
@@ -155,6 +161,7 @@ func WireTrip(
 		publishLongDistanceUC, confirmLongDistanceUC, scheduleLongDistanceUC, departForPickupUC,
 		beginOutboundUC, reachOutboundUC, resolveOutboundUC, scheduleReturnUC, startReturnUC,
 		beginReturnUC, reachFinalUC, completeLongDistanceUC, cancelTripUC, calculateRouteUC,
+		getSurgeMultiplierUC, getSurgeHeatmapUC,
 	)
 
 	eventHandler := handlers.NewTripEventHandler(getTripHistoryUC)

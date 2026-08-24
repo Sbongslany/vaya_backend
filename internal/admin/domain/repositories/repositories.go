@@ -24,4 +24,10 @@ type AdminRepository interface {
 	ForceCompleteTrip(ctx context.Context, tripID uuid.UUID) error
 	ListActiveSOS(ctx context.Context) ([]*entities.LiveSOS, error)
 	CreateAuditLog(ctx context.Context, log *entities.AdminAuditLog) error
+
+	// Phase C: Payout Approvals
+	ListPendingPayouts(ctx context.Context) ([]*entities.PayoutSummary, error)
+	GetPayoutByID(ctx context.Context, payoutID uuid.UUID) (*entities.PayoutDetails, error)
+	ApprovePayout(ctx context.Context, payoutID uuid.UUID, adminID uuid.UUID) error
+	RejectPayout(ctx context.Context, payoutID uuid.UUID, adminID uuid.UUID, reason string) error
 }

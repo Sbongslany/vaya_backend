@@ -128,7 +128,7 @@ func main() {
 
 	supportContainer := supportDep.WireSupport(pgPool, walletContainer)
 
-	adminContainer := adminDep.WireAdmin(pgPool)
+	adminContainer := adminDep.WireAdmin(pgPool, nil)
 
 	kycContainer := kycDep.WireKYC(pgPool)
 

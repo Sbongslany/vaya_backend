@@ -2,10 +2,12 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/yourorg/ehailing/backend/internal/admin/domain/entities"
@@ -41,7 +43,7 @@ func (r *AdminRepository) GetPlatformStats(ctx context.Context) (*entities.Platf
 	if err != nil {
 		return nil, err
 	}
-	stats.TotalCommission = stats.TotalRevenue * 0.20
+	stats.TotalCommission = stats.TotalRevenue * 0.20 
 	return stats, nil
 }
 
@@ -229,4 +231,69 @@ func (r *AdminRepository) CreateAuditLog(ctx context.Context, log *entities.Admi
 	_, err := r.pool.Exec(ctx, `INSERT INTO admin_audit_logs (id, admin_id, action, resource_type, resource_id, details, created_at) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 		log.ID, log.AdminID, log.Action, log.ResourceType, log.ResourceID, log.Details, log.CreatedAt)
 	return err
+}
+
+// ==========================================
+// PHASE C: PAYOUT APPROVALS IMPLEMENTATIONS
+// ==========================================
+
+func (r *AdminRepository) ListPendingPayouts(ctx context.Context) ([]*entities.PayoutSummary, error) {
+	query := `
+		SELECT id, driver_id, amount, bank_name, account_number, status, created_at 
+		FROM payouts 
+		WHERE status = 'PENDING' 
+		ORDER BY created_at ASC
+	`
+	rows, err := r.pool.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var payouts []*entities.PayoutSummary
+	for rows.Next() {
+		p := &entities.PayoutSummary{}
+		if err := rows.Scan(&p.ID, &p.DriverID, &p.Amount, &p.BankName, &p.AccountNumber, &p.Status, &p.CreatedAt); err != nil {
+			return nil, err
+		}
+		payouts = append(payouts, p)
+	}
+	return payouts, rows.Err()
+}
+
+func (r *AdminRepository) GetPayoutByID(ctx context.Context, payoutID uuid.UUID) (*entities.PayoutDetails, error) {
+	query := `SELECT id, driver_id, amount, bank_code, account_number, status FROM payouts WHERE id = $1`
+	p := &entities.PayoutDetails{}
+	err := r.pool.QueryRow(ctx, query, payoutID).Scan(&p.ID, &p.DriverID, &p.Amount, &p.BankCode, &p.AccountNumber, &p.Status)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return p, nil
+}
+
+func (r *AdminRepository) ApprovePayout(ctx context.Context, payoutID uuid.UUID, adminID uuid.UUID) error {
+	query := `UPDATE payouts SET status = 'APPROVED', updated_at = NOW() WHERE id = $1 AND status = 'PENDING'`
+	_, err := r.pool.Exec(ctx, query, payoutID)
+	if err != nil {
+		return err
+	}
+	
+	return r.CreateAuditLog(ctx, &entities.AdminAuditLog{
+		ID: uuid.New(), AdminID: adminID, Action: "APPROVE_PAYOUT", ResourceType: "PAYOUT", ResourceID: &payoutID, Details: "Payout approved by admin", CreatedAt: time.Now(),
+	})
+}
+
+func (r *AdminRepository) RejectPayout(ctx context.Context, payoutID uuid.UUID, adminID uuid.UUID, reason string) error {
+	query := `UPDATE payouts SET status = 'REJECTED', updated_at = NOW() WHERE id = $1 AND status = 'PENDING'`
+	_, err := r.pool.Exec(ctx, query, payoutID)
+	if err != nil {
+		return err
+	}
+	
+	return r.CreateAuditLog(ctx, &entities.AdminAuditLog{
+		ID: uuid.New(), AdminID: adminID, Action: "REJECT_PAYOUT", ResourceType: "PAYOUT", ResourceID: &payoutID, Details: "Rejected: " + reason, CreatedAt: time.Now(),
+	})
 }

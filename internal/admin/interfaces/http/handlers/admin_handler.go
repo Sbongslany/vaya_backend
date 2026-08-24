@@ -13,38 +13,55 @@ import (
 )
 
 type AdminHandler struct {
+	// Phase 17: Dashboard
 	getOverviewUC      *usecases.GetPlatformOverview
 	getFinancialUC     *usecases.GetFinancialSummary
 	listUsersUC        *usecases.ListUsers
 	updateUserStatusUC *usecases.UpdateUserStatus
 	listTripsUC        *usecases.ListAllTrips
-	getLiveMapUC       *usecases.GetLiveMap
-	forceCancelUC      *usecases.ForceCancelTrip
-	forceCompleteUC    *usecases.ForceCompleteTrip
-	getActiveSOSUC     *usecases.GetActiveSOS
+
+	// Phase B: Live Operations
+	getLiveMapUC    *usecases.GetLiveMap
+	forceCancelUC   *usecases.ForceCancelTrip
+	forceCompleteUC *usecases.ForceCompleteTrip
+	getActiveSOSUC  *usecases.GetActiveSOS
+
+	// Phase C: Financial Controls (Payouts)
+	getPendingPayoutsUC     *usecases.GetPendingPayouts
+	processPayoutApprovalUC *usecases.ProcessPayoutApproval
+	rejectPayoutUC          *usecases.RejectPayout
 }
 
 func NewAdminHandler(
+	// Phase 17
 	getOverviewUC *usecases.GetPlatformOverview,
 	getFinancialUC *usecases.GetFinancialSummary,
 	listUsersUC *usecases.ListUsers,
 	updateUserStatusUC *usecases.UpdateUserStatus,
 	listTripsUC *usecases.ListAllTrips,
+	// Phase B
 	getLiveMapUC *usecases.GetLiveMap,
 	forceCancelUC *usecases.ForceCancelTrip,
 	forceCompleteUC *usecases.ForceCompleteTrip,
 	getActiveSOSUC *usecases.GetActiveSOS,
+	// Phase C
+	getPendingPayoutsUC *usecases.GetPendingPayouts,
+	processPayoutApprovalUC *usecases.ProcessPayoutApproval,
+	rejectPayoutUC *usecases.RejectPayout,
 ) *AdminHandler {
 	return &AdminHandler{
-		getOverviewUC:      getOverviewUC,
-		getFinancialUC:     getFinancialUC,
-		listUsersUC:        listUsersUC,
-		updateUserStatusUC: updateUserStatusUC,
-		listTripsUC:        listTripsUC,
-		getLiveMapUC:       getLiveMapUC,
-		forceCancelUC:      forceCancelUC,
-		forceCompleteUC:    forceCompleteUC,
-		getActiveSOSUC:     getActiveSOSUC,
+		getOverviewUC:           getOverviewUC,
+		getFinancialUC:          getFinancialUC,
+		listUsersUC:             listUsersUC,
+		updateUserStatusUC:      updateUserStatusUC,
+		listTripsUC:             listTripsUC,
+		getLiveMapUC:            getLiveMapUC,
+		forceCancelUC:           forceCancelUC,
+		forceCompleteUC:         forceCompleteUC,
+		getActiveSOSUC:          getActiveSOSUC,
+		getPendingPayoutsUC:     getPendingPayoutsUC,
+		processPayoutApprovalUC: processPayoutApprovalUC,
+		rejectPayoutUC:          rejectPayoutUC,
 	}
 }
 
@@ -205,4 +222,73 @@ func (h *AdminHandler) GetActiveSOS(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"alerts": alerts})
+}
+
+// --- Phase C: Payout Approval Handlers ---
+
+func (h *AdminHandler) GetPendingPayouts(c *gin.Context) {
+	payouts, err := h.getPendingPayoutsUC.Execute(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed_to_fetch_payouts"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"payouts": payouts})
+}
+
+type PayoutActionRequest struct {
+	PayoutID string `json:"payout_id" binding:"required"`
+	Reason   string `json:"reason"`
+}
+
+func (h *AdminHandler) ApprovePayout(c *gin.Context) {
+	adminIDStr, _ := c.Get(authMiddleware.UserIDKey)
+	adminID, _ := uuid.Parse(adminIDStr.(string))
+
+	var req PayoutActionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+		return
+	}
+
+	payoutID, err := uuid.Parse(req.PayoutID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_payout_id"})
+		return
+	}
+
+	// This now triggers the Paystack API and updates the DB
+	if err := h.processPayoutApprovalUC.Execute(c.Request.Context(), usecases.ProcessPayoutApprovalInput{
+		AdminID: adminID, PayoutID: payoutID,
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed_to_process_payout", "details": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "payout_approved_and_transfer_initiated"})
+}
+
+func (h *AdminHandler) RejectPayout(c *gin.Context) {
+	adminIDStr, _ := c.Get(authMiddleware.UserIDKey)
+	adminID, _ := uuid.Parse(adminIDStr.(string))
+
+	var req PayoutActionRequest
+	if err := c.ShouldBindJSON(&req); err != nil || req.Reason == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request_or_missing_reason"})
+		return
+	}
+
+	payoutID, err := uuid.Parse(req.PayoutID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_payout_id"})
+		return
+	}
+
+	if err := h.rejectPayoutUC.Execute(c.Request.Context(), usecases.RejectPayoutInput{
+		AdminID: adminID, PayoutID: payoutID, Reason: req.Reason,
+	}); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed_to_reject_payout"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "payout_rejected"})
 }

@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -146,4 +147,73 @@ func NewGetActiveSOS(repo repositories.AdminRepository) *GetActiveSOS {
 }
 func (uc *GetActiveSOS) Execute(ctx context.Context) ([]*entities.LiveSOS, error) {
 	return uc.repo.ListActiveSOS(ctx)
+}
+
+// ==========================================
+// PHASE C: PAYOUT APPROVAL USE CASES
+// ==========================================
+
+// PayoutProvider interface defines what the Admin module needs from the Paystack service
+type PayoutProvider interface {
+	InitiateTransfer(ctx context.Context, bankCode, accountNumber string, amount float64) error
+}
+
+type GetPendingPayouts struct{ repo repositories.AdminRepository }
+
+func NewGetPendingPayouts(repo repositories.AdminRepository) *GetPendingPayouts {
+	return &GetPendingPayouts{repo: repo}
+}
+func (uc *GetPendingPayouts) Execute(ctx context.Context) ([]*entities.PayoutSummary, error) {
+	return uc.repo.ListPendingPayouts(ctx)
+}
+
+type RejectPayoutInput struct {
+	AdminID  uuid.UUID
+	PayoutID uuid.UUID
+	Reason   string
+}
+type RejectPayout struct{ repo repositories.AdminRepository }
+
+func NewRejectPayout(repo repositories.AdminRepository) *RejectPayout {
+	return &RejectPayout{repo: repo}
+}
+func (uc *RejectPayout) Execute(ctx context.Context, input RejectPayoutInput) error {
+	return uc.repo.RejectPayout(ctx, input.PayoutID, input.AdminID, input.Reason)
+}
+
+// ProcessPayoutApproval handles fetching details, calling Paystack, and updating DB
+type ProcessPayoutApprovalInput struct {
+	AdminID  uuid.UUID
+	PayoutID uuid.UUID
+}
+
+type ProcessPayoutApproval struct {
+	repo          repositories.AdminRepository
+	payoutService PayoutProvider
+}
+
+func NewProcessPayoutApproval(repo repositories.AdminRepository, payoutService PayoutProvider) *ProcessPayoutApproval {
+	return &ProcessPayoutApproval{repo: repo, payoutService: payoutService}
+}
+
+func (uc *ProcessPayoutApproval) Execute(ctx context.Context, input ProcessPayoutApprovalInput) error {
+	// 1. Fetch payout details
+	payout, err := uc.repo.GetPayoutByID(ctx, input.PayoutID)
+	if err != nil {
+		return err
+	}
+	if payout == nil {
+		return fmt.Errorf("payout not found")
+	}
+	if payout.Status != "PENDING" {
+		return fmt.Errorf("payout is not in pending status")
+	}
+
+	// 2. Call Paystack to initiate the bank transfer
+	if err := uc.payoutService.InitiateTransfer(ctx, payout.BankCode, payout.AccountNumber, payout.Amount); err != nil {
+		return fmt.Errorf("failed to initiate paystack transfer: %w", err)
+	}
+
+	// 3. Update database status to APPROVED
+	return uc.repo.ApprovePayout(ctx, input.PayoutID, input.AdminID)
 }

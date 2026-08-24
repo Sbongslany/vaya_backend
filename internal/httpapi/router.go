@@ -367,6 +367,11 @@ func NewRouter(
 		adminDashboard.POST("/trips/force-cancel", adminContainer.Handler.ForceCancelTrip)
 		adminDashboard.POST("/trips/force-complete", adminContainer.Handler.ForceCompleteTrip)
 		adminDashboard.GET("/safety/sos/active", adminContainer.Handler.GetActiveSOS)
+
+				// Phase C: Financial Controls (Payouts)
+		adminDashboard.GET("/payouts/pending", adminContainer.Handler.GetPendingPayouts)
+		adminDashboard.POST("/payouts/approve", adminContainer.Handler.ApprovePayout)
+		adminDashboard.POST("/payouts/reject", adminContainer.Handler.RejectPayout)
 	}
 
 	// ==========================================

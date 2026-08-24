@@ -102,3 +102,24 @@ type LiveSOS struct {
 	Status      string
 	TriggeredAt time.Time
 }
+
+// --- Phase C: Payout Approval Entities ---
+
+type PayoutSummary struct {
+	ID            uuid.UUID
+	DriverID      uuid.UUID
+	Amount        float64
+	BankName      string
+	AccountNumber string
+	Status        string
+	CreatedAt     time.Time
+}
+
+type PayoutDetails struct {
+	ID            uuid.UUID
+	DriverID      uuid.UUID
+	Amount        float64
+	BankCode      string
+	AccountNumber string
+	Status        string
+}

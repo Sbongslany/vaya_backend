@@ -12,21 +12,31 @@ type AdminContainer struct {
 	Handler *handlers.AdminHandler
 }
 
-func WireAdmin(pgPool *pgxpool.Pool) *AdminContainer {
+// WireAdmin now accepts the PayoutProvider interface instead of a concrete struct.
+// This prevents import path errors!
+func WireAdmin(
+	pgPool *pgxpool.Pool,
+	payoutService usecases.PayoutProvider, // <-- CHANGED TO INTERFACE
+) *AdminContainer {
 	adminRepo := postgres.NewAdminRepository(pgPool)
 
-	// Phase 17: Existing Dashboard Use Cases
+	// Phase 17: Dashboard
 	getOverviewUC := usecases.NewGetPlatformOverview(adminRepo)
 	getFinancialUC := usecases.NewGetFinancialSummary(adminRepo)
 	listUsersUC := usecases.NewListUsers(adminRepo)
 	updateUserStatusUC := usecases.NewUpdateUserStatus(adminRepo)
 	listTripsUC := usecases.NewListAllTrips(adminRepo)
 
-	// Phase B: New Live Operations Use Cases
+	// Phase B: Live Operations
 	getLiveMapUC := usecases.NewGetLiveMap(adminRepo)
 	forceCancelUC := usecases.NewForceCancelTrip(adminRepo)
 	forceCompleteUC := usecases.NewForceCompleteTrip(adminRepo)
 	getActiveSOSUC := usecases.NewGetActiveSOS(adminRepo)
+
+	// Phase C: Payout Approvals
+	getPendingPayoutsUC := usecases.NewGetPendingPayouts(adminRepo)
+	processPayoutApprovalUC := usecases.NewProcessPayoutApproval(adminRepo, payoutService)
+	rejectPayoutUC := usecases.NewRejectPayout(adminRepo)
 
 	handler := handlers.NewAdminHandler(
 		getOverviewUC,
@@ -38,6 +48,9 @@ func WireAdmin(pgPool *pgxpool.Pool) *AdminContainer {
 		forceCancelUC,
 		forceCompleteUC,
 		getActiveSOSUC,
+		getPendingPayoutsUC,
+		processPayoutApprovalUC,
+		rejectPayoutUC,
 	)
 
 	return &AdminContainer{

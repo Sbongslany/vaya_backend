@@ -8,9 +8,6 @@ import (
 
 	driverRedis "github.com/yourorg/ehailing/backend/internal/driver/infrastructure/persistence/redis"
 	promoDep "github.com/yourorg/ehailing/backend/internal/promotions/dependency"
-	walletDep "github.com/yourorg/ehailing/backend/internal/wallet/dependency"
-	walletUseCases "github.com/yourorg/ehailing/backend/internal/wallet/application/usecases"
-	walletPostgres "github.com/yourorg/ehailing/backend/internal/wallet/infrastructure/persistence/postgres"
 	"github.com/yourorg/ehailing/backend/internal/trip/application/usecases"
 	"github.com/yourorg/ehailing/backend/internal/trip/domain/services"
 	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/notifications"
@@ -20,6 +17,9 @@ import (
 	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/surge"
 	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/websocket"
 	"github.com/yourorg/ehailing/backend/internal/trip/interfaces/http/handlers"
+	walletUseCases "github.com/yourorg/ehailing/backend/internal/wallet/application/usecases"
+	walletDep "github.com/yourorg/ehailing/backend/internal/wallet/dependency"
+	walletPostgres "github.com/yourorg/ehailing/backend/internal/wallet/infrastructure/persistence/postgres"
 )
 
 type TripContainer struct {
@@ -44,6 +44,7 @@ func WireTrip(
 ) *TripContainer {
 	// Repositories
 	tripRepo := postgres.NewTripRepository(pgPool)
+	waypointRepo := postgres.NewWaypointRepository(pgPool)
 	tripOfferRepo := postgres.NewTripOfferRepository(pgPool)
 	paymentRepo := postgres.NewPaymentRepository(pgPool)
 	ratingRepo := postgres.NewTripRatingRepository(pgPool)
@@ -107,6 +108,7 @@ func WireTrip(
 
 	// Use cases — normal trip
 	createTripUC := usecases.NewCreateTrip(tripRepo, fareCalc, eventService, promoRedeemer, routingService, surgeService)
+	createMultiStopTripUC := usecases.NewCreateMultiStopTrip(tripRepo, waypointRepo, fareCalc)
 	getTripUC := usecases.NewGetTrip(tripRepo)
 	getNearbyTripsUC := usecases.NewGetNearbyTrips(tripRepo)
 	submitOfferUC := usecases.NewSubmitTripOffer(tripRepo, tripOfferRepo, stateMachine)
@@ -161,7 +163,7 @@ func WireTrip(
 		publishLongDistanceUC, confirmLongDistanceUC, scheduleLongDistanceUC, departForPickupUC,
 		beginOutboundUC, reachOutboundUC, resolveOutboundUC, scheduleReturnUC, startReturnUC,
 		beginReturnUC, reachFinalUC, completeLongDistanceUC, cancelTripUC, calculateRouteUC,
-		getSurgeMultiplierUC, getSurgeHeatmapUC,
+		getSurgeMultiplierUC, getSurgeHeatmapUC, createMultiStopTripUC,
 	)
 
 	eventHandler := handlers.NewTripEventHandler(getTripHistoryUC)

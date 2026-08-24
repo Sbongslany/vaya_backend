@@ -104,6 +104,8 @@ type Trip struct {
 	RouteDurationMinutes *int
 	RouteDistanceKM      *float64
 	SurgeMultiplier      *float64
+	ScheduledPickupTime  *time.Time
+	Waypoints            []*Waypoint
 	CreatedAt            time.Time
 	UpdatedAt            time.Time
 }

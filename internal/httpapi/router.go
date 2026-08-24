@@ -185,6 +185,7 @@ func NewRouter(
 		trips.POST("/:id/pay", tripContainer.Handler.ProcessPayment)
 		trips.POST("/:id/rate", tripContainer.Handler.SubmitRating)
 		trips.POST("/:id/cancel", tripContainer.Handler.CancelTrip)
+		trips.POST("/multi-stop", tripContainer.Handler.CreateMultiStopTrip)
 
 		// Long-distance execution (outbound)
 		trips.POST("/:id/long-distance/publish", tripContainer.Handler.PublishLongDistanceTrip)

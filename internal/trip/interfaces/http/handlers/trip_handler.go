@@ -45,6 +45,7 @@ type TripHandler struct {
 	calculateRouteUC              *usecases.CalculateRoute // <-- ADD THIS LINE
 	getSurgeMultiplierUC          *usecases.GetSurgeMultiplier
 	getSurgeHeatmapUC             *usecases.GetSurgeHeatmap
+	createMultiStopTripUC         *usecases.CreateMultiStopTrip
 }
 
 func NewTripHandler(
@@ -78,6 +79,7 @@ func NewTripHandler(
 	calculateRouteUC *usecases.CalculateRoute, // <-- ADD THIS LINE
 	getSurgeMultiplierUC *usecases.GetSurgeMultiplier,
 	getSurgeHeatmapUC *usecases.GetSurgeHeatmap,
+	createMultiStopTripUC *usecases.CreateMultiStopTrip,
 
 ) *TripHandler {
 	return &TripHandler{
@@ -1163,4 +1165,50 @@ func (h *TripHandler) GetSurgeHeatmap(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"zones": zones})
+}
+
+type CreateMultiStopTripRequest struct {
+	PickupLatitude   float64                  `json:"pickup_latitude" binding:"required"`
+	PickupLongitude  float64                  `json:"pickup_longitude" binding:"required"`
+	PickupAddress    string                   `json:"pickup_address" binding:"required"`
+	DropoffLatitude  float64                  `json:"dropoff_latitude" binding:"required"`
+	DropoffLongitude float64                  `json:"dropoff_longitude" binding:"required"`
+	DropoffAddress   string                   `json:"dropoff_address" binding:"required"`
+	Waypoints        []usecases.WaypointInput `json:"waypoints"`
+}
+
+func (h *TripHandler) CreateMultiStopTrip(c *gin.Context) {
+	userIDStr, exists := c.Get(authMiddleware.UserIDKey)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	passengerID, err := uuid.Parse(userIDStr.(string))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	var req CreateMultiStopTripRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request", "details": err.Error()})
+		return
+	}
+
+	trip, err := h.createMultiStopTripUC.Execute(c.Request.Context(), usecases.CreateMultiStopTripInput{
+		PassengerID:      passengerID,
+		PickupLatitude:   req.PickupLatitude,
+		PickupLongitude:  req.PickupLongitude,
+		PickupAddress:    req.PickupAddress,
+		DropoffLatitude:  req.DropoffLatitude,
+		DropoffLongitude: req.DropoffLongitude,
+		DropoffAddress:   req.DropoffAddress,
+		Waypoints:        req.Waypoints,
+	})
+	if err != nil {
+		handleTripError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"trip": trip})
 }

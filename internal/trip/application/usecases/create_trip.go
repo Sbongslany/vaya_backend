@@ -16,14 +16,15 @@ import (
 )
 
 type CreateTripInput struct {
-	PassengerID      uuid.UUID
-	PickupLatitude   float64
-	PickupLongitude  float64
-	PickupAddress    string
-	DropoffLatitude  float64
-	DropoffLongitude float64
-	DropoffAddress   string
-	PromoCode        string
+	PassengerID         uuid.UUID
+	PickupLatitude      float64
+	PickupLongitude     float64
+	PickupAddress       string
+	DropoffLatitude     float64
+	DropoffLongitude    float64
+	DropoffAddress      string
+	PromoCode           string
+	ScheduledPickupTime *time.Time // New field for scheduled rides
 }
 
 type CreateTrip struct {
@@ -93,10 +94,7 @@ func (uc *CreateTrip) Execute(ctx context.Context, input CreateTripInput) (*enti
 	// Apply surge multiplier
 	surgeMultiplier := 1.0
 	if uc.surgeService != nil {
-		// Record this request as demand
 		_ = uc.surgeService.RecordDemand(ctx, input.PickupLatitude, input.PickupLongitude)
-
-		// Get current multiplier for this zone
 		multiplier, err := uc.surgeService.GetMultiplier(ctx, input.PickupLatitude, input.PickupLongitude)
 		if err == nil && multiplier > 1.0 {
 			surgeMultiplier = multiplier
@@ -108,11 +106,17 @@ func (uc *CreateTrip) Execute(ctx context.Context, input CreateTripInput) (*enti
 	now := time.Now()
 	tripID := uuid.New()
 
+	// Determine status based on whether it's scheduled
+	status := entities.StatusRequested
+	if input.ScheduledPickupTime != nil {
+		status = entities.StatusScheduled
+	}
+
 	trip := &entities.Trip{
 		ID:                   tripID,
 		PassengerID:          input.PassengerID,
 		TripType:             entities.TripTypeNormal,
-		Status:               entities.StatusRequested,
+		Status:               status,
 		StartPIN:             generatePIN(),
 		PickupLatitude:       input.PickupLatitude,
 		PickupLongitude:      input.PickupLongitude,
@@ -127,6 +131,7 @@ func (uc *CreateTrip) Execute(ctx context.Context, input CreateTripInput) (*enti
 		RouteDurationMinutes: &routeResult.DurationMinutes,
 		RouteDistanceKM:      &routeResult.DistanceKM,
 		SurgeMultiplier:      &surgeMultiplier,
+		ScheduledPickupTime:  input.ScheduledPickupTime,
 		DiscountAmount:       0,
 		CreatedAt:            now,
 		UpdatedAt:            now,
@@ -156,7 +161,7 @@ func (uc *CreateTrip) Execute(ctx context.Context, input CreateTripInput) (*enti
 		entities.EventTypeTripCreated,
 		&input.PassengerID,
 		"",
-		string(entities.StatusRequested),
+		string(status),
 		map[string]interface{}{
 			"pickup_address":   input.PickupAddress,
 			"dropoff_address":  input.DropoffAddress,
@@ -164,6 +169,7 @@ func (uc *CreateTrip) Execute(ctx context.Context, input CreateTripInput) (*enti
 			"distance_km":      routeResult.DistanceKM,
 			"duration_min":     routeResult.DurationMinutes,
 			"surge_multiplier": surgeMultiplier,
+			"scheduled":        input.ScheduledPickupTime != nil,
 		},
 	)
 

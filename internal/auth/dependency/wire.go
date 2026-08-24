@@ -52,10 +52,18 @@ func WireAuth(pool *pgxpool.Pool, redisClient *redis.Client, cfg *config.Config,
 	cloudinarySvc := cloudinary.NewCloudinaryService(cfg) // NEW
 
 	// Providers
+	// Providers
 	smsProvider := sms.NewConsoleProvider(log)
-	emailProvider := email.NewConsoleProvider(log)
+	emailProvider := email.NewGmailSMTPProvider(
+		cfg.SMTPHost,
+		cfg.SMTPPort,
+		cfg.SMTPUsername,
+		cfg.SMTPPassword,
+		cfg.SMTPFromEmail,
+		log,
+	)
 
-	appCfg := &usecases.AppConfig{ RefreshTTL: cfg.JWTRefreshTTL }
+	appCfg := &usecases.AppConfig{RefreshTTL: cfg.JWTRefreshTTL}
 
 	// Auth Use Cases
 	registerUC := usecases.NewRegisterUser(userRepo, passwordSvc, auditRepo)
@@ -92,7 +100,7 @@ func WireAuth(pool *pgxpool.Pool, redisClient *redis.Client, cfg *config.Config,
 	updateProfileUC := usecases.NewUpdateDriverProfile(driverRepo)
 	createVehicleUC := usecases.NewCreateVehicle(driverRepo)
 	getOnboardingUC := usecases.NewGetOnboardingStatus(driverRepo, docReqRepo)
-	
+
 	// Document Use Cases (NEW)
 	generateSignatureUC := usecases.NewGenerateUploadSignature(driverRepo, cloudinarySvc, cfg)
 	submitDocumentUC := usecases.NewSubmitDocument(driverRepo, docRepo)

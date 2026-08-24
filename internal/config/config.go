@@ -46,6 +46,12 @@ type Config struct {
 	RoutingProvider  string // "osrm", "google", or "haversine"
 	OSRMBaseURL      string
 	GoogleMapsAPIKey string
+
+	SMTPHost      string
+	SMTPPort      string
+	SMTPUsername  string
+	SMTPPassword  string
+	SMTPFromEmail string
 }
 
 type PostgresConfig struct {
@@ -416,6 +422,12 @@ func Load() (*Config, error) {
 		RoutingProvider:  routingProvider,
 		OSRMBaseURL:      osrmBaseURL,
 		GoogleMapsAPIKey: googleMapsAPIKey,
+
+		SMTPHost:      getEnv("SMTP_HOST", "smtp.gmail.com"),
+		SMTPPort:      getEnv("SMTP_PORT", "587"),
+		SMTPUsername:  getEnv("SMTP_USERNAME", ""),
+		SMTPPassword:  getEnv("SMTP_PASSWORD", ""),
+		SMTPFromEmail: getEnv("SMTP_FROM_EMAIL", ""),
 	}
 
 	return cfg, nil

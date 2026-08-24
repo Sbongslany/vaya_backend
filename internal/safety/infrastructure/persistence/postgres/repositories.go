@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -100,4 +101,13 @@ func (r *ShareTokenRepository) GetByToken(ctx context.Context, token string) (*e
 		return nil, err
 	}
 	return t, nil
+}
+
+func (r *ShareTokenRepository) DeleteExpired(ctx context.Context, before time.Time) (int64, error) {
+	query := `DELETE FROM trip_share_tokens WHERE expires_at < $1`
+	res, err := r.pool.Exec(ctx, query, before)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected(), nil
 }

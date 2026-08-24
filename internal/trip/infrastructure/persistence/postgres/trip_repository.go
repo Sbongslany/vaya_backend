@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -309,4 +310,24 @@ func haversineDistanceKM(lat1, lng1, lat2, lng2 float64) float64 {
 			math.Sin(dLng/2)*math.Sin(dLng/2)
 	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
 	return R * c
+}
+
+func (r *TripRepository) CancelStalledRequestedTrips(ctx context.Context, olderThan time.Time) (int64, error) {
+	query := `UPDATE trips SET status = 'CANCELLED', updated_at = NOW()
+			  WHERE status = 'REQUESTED' AND created_at < $1`
+	res, err := r.pool.Exec(ctx, query, olderThan)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected(), nil
+}
+
+func (r *TripRepository) ActivateScheduledTrips(ctx context.Context, before time.Time) (int64, error) {
+	query := `UPDATE trips SET status = 'REQUESTED', updated_at = NOW()
+			  WHERE status = 'SCHEDULED' AND scheduled_pickup_time <= $1`
+	res, err := r.pool.Exec(ctx, query, before)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected(), nil
 }

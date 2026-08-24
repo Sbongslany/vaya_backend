@@ -30,6 +30,11 @@ import (
 	tripDep "github.com/yourorg/ehailing/backend/internal/trip/dependency"
 	walletDep "github.com/yourorg/ehailing/backend/internal/wallet/dependency"
 	"github.com/yourorg/ehailing/backend/migrations"
+
+	safetyPostgres "github.com/yourorg/ehailing/backend/internal/safety/infrastructure/persistence/postgres"
+	tripPostgres "github.com/yourorg/ehailing/backend/internal/trip/infrastructure/persistence/postgres"
+	"github.com/yourorg/ehailing/backend/internal/workers"
+	"github.com/yourorg/ehailing/backend/internal/workers/jobs"
 )
 
 func main() {
@@ -121,6 +126,17 @@ func main() {
 	)
 
 	driverContainer := driverDep.WireDriver(redisClient)
+
+	// Initialize Background Workers
+	tripRepoForWorkers := tripPostgres.NewTripRepository(pgPool)
+	shareRepoForWorkers := safetyPostgres.NewShareTokenRepository(pgPool)
+
+	tripJobs := jobs.NewTripJobs(tripRepoForWorkers, log)
+	cleanupJobs := jobs.NewCleanupJobs(shareRepoForWorkers, log)
+
+	workerManager := workers.NewManager(tripJobs, cleanupJobs, log)
+	workerManager.Start()
+	defer workerManager.Stop()
 
 	// Create HTTP router.
 	engine := httpapi.NewRouter(

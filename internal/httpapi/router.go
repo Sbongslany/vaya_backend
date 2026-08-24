@@ -19,6 +19,7 @@ import (
 	"github.com/yourorg/ehailing/backend/internal/http/middleware"
 	kycDep "github.com/yourorg/ehailing/backend/internal/kyc/dependency"
 	promoDep "github.com/yourorg/ehailing/backend/internal/promotions/dependency"
+	safetyDep "github.com/yourorg/ehailing/backend/internal/safety/dependency"
 	supportDep "github.com/yourorg/ehailing/backend/internal/support/dependency"
 	tripDep "github.com/yourorg/ehailing/backend/internal/trip/dependency"
 	walletDep "github.com/yourorg/ehailing/backend/internal/wallet/dependency"
@@ -39,6 +40,8 @@ func NewRouter(
 	adminContainer *adminDep.AdminContainer,
 	kycContainer *kycDep.KYCContainer,
 	geofenceContainer *geofenceDep.GeofenceContainer,
+	safetyContainer *safetyDep.SafetyContainer,
+
 ) *gin.Engine {
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -227,6 +230,21 @@ func NewRouter(
 		trips.GET("/surge", tripContainer.Handler.GetSurgeMultiplier)
 		trips.GET("/surge/heatmap", tripContainer.Handler.GetSurgeHeatmap)
 	}
+
+	// ==========================================
+	// SAFETY ROUTES
+	// ==========================================
+
+	// Protected Safety Routes (Passenger/Driver)
+	safetyRoutes := engine.Group("/api/v1/safety")
+	safetyRoutes.Use(authContainer.Middleware.Authenticate())
+	{
+		safetyRoutes.POST("/sos", safetyContainer.Handler.TriggerSOS)
+		safetyRoutes.POST("/share-link", safetyContainer.Handler.GenerateShareLink)
+	}
+
+	// Public Safety Routes (Unauthenticated tracking for trusted contacts)
+	engine.GET("/track/:token", safetyContainer.Handler.ViewSharedTrip)
 
 	// ==========================================
 	// ADMIN PROMOTIONS ROUTES (Protected + Admin Role)

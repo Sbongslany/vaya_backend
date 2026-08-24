@@ -8,6 +8,7 @@ import (
 
 	driverRedis "github.com/yourorg/ehailing/backend/internal/driver/infrastructure/persistence/redis"
 	promoDep "github.com/yourorg/ehailing/backend/internal/promotions/dependency"
+	settingsPostgres "github.com/yourorg/ehailing/backend/internal/settings/infrastructure/persistence/postgres"
 	"github.com/yourorg/ehailing/backend/internal/trip/application/usecases"
 	"github.com/yourorg/ehailing/backend/internal/trip/domain/services"
 	"github.com/yourorg/ehailing/backend/internal/trip/infrastructure/notifications"
@@ -105,9 +106,10 @@ func WireTrip(
 	// Wallet balance use case
 	walletPostgresRepo := walletPostgres.NewWalletRepository(pgPool)
 	walletBalanceUC := walletUseCases.NewGetWallet(walletPostgresRepo)
+	vehicleTypeRepo := settingsPostgres.NewVehicleTypeRepository(pgPool)
 
 	// Use cases — normal trip
-	createTripUC := usecases.NewCreateTrip(tripRepo, fareCalc, eventService, promoRedeemer, routingService, surgeService)
+	createTripUC := usecases.NewCreateTrip(tripRepo, vehicleTypeRepo, fareCalc, eventService, promoRedeemer, routingService, surgeService)
 	createMultiStopTripUC := usecases.NewCreateMultiStopTrip(tripRepo, waypointRepo, fareCalc)
 	getTripUC := usecases.NewGetTrip(tripRepo)
 	getNearbyTripsUC := usecases.NewGetNearbyTrips(tripRepo)

@@ -32,6 +32,7 @@ import (
 	"github.com/yourorg/ehailing/backend/migrations"
 
 	safetyPostgres "github.com/yourorg/ehailing/backend/internal/safety/infrastructure/persistence/postgres"
+	settingsDep "github.com/yourorg/ehailing/backend/internal/settings/dependency"
 	tripPostgres "github.com/yourorg/ehailing/backend/internal/trip/infrastructure/persistence/postgres"
 	"github.com/yourorg/ehailing/backend/internal/workers"
 	"github.com/yourorg/ehailing/backend/internal/workers/jobs"
@@ -135,6 +136,8 @@ func main() {
 
 	safetyContainer := safetyDep.WireSafety(pgPool, cfg.AppBaseURL)
 
+	settingsContainer := settingsDep.WireSettings(pgPool)
+
 	// Wire trip dependencies (now passes promosContainer)
 	tripContainer := tripDep.WireTrip(
 		pgPool,
@@ -178,6 +181,7 @@ func main() {
 		kycContainer,
 		geofenceContainer,
 		safetyContainer,
+		settingsContainer,
 	)
 
 	// Configure HTTP server.

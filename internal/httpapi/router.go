@@ -29,6 +29,8 @@ import (
 
 	// This imports the generated docs folder (we will create it in Step 4)
 	_ "github.com/yourorg/ehailing/backend/docs"
+
+	settingsDep "github.com/yourorg/ehailing/backend/internal/settings/dependency"
 )
 
 func NewRouter(
@@ -47,6 +49,7 @@ func NewRouter(
 	kycContainer *kycDep.KYCContainer,
 	geofenceContainer *geofenceDep.GeofenceContainer,
 	safetyContainer *safetyDep.SafetyContainer,
+	settingsContainer *settingsDep.SettingsContainer,
 
 ) *gin.Engine {
 	if cfg.Env == "production" {
@@ -155,6 +158,7 @@ func NewRouter(
 			adminProtected.GET("/me", authContainer.Handler.GetMe)
 			adminProtected.POST("/logout", authContainer.Handler.Logout)
 		}
+
 	}
 
 	// ==========================================
@@ -351,11 +355,18 @@ func NewRouter(
 		authContainer.AdminMiddleware.RequireAdmin(),
 	)
 	{
+		// Phase 17: Existing Dashboard Stats & Management
 		adminDashboard.GET("/overview", adminContainer.Handler.GetPlatformOverview)
 		adminDashboard.GET("/financials", adminContainer.Handler.GetFinancialSummary)
 		adminDashboard.GET("/users", adminContainer.Handler.ListUsers)
 		adminDashboard.PATCH("/users/:userId/status", adminContainer.Handler.UpdateUserStatus)
 		adminDashboard.GET("/trips", adminContainer.Handler.ListAllTrips)
+
+		// Phase B: Live Operations & Trip Intervention (NEW)
+		adminDashboard.GET("/live-map", adminContainer.Handler.GetLiveMap)
+		adminDashboard.POST("/trips/force-cancel", adminContainer.Handler.ForceCancelTrip)
+		adminDashboard.POST("/trips/force-complete", adminContainer.Handler.ForceCompleteTrip)
+		adminDashboard.GET("/safety/sos/active", adminContainer.Handler.GetActiveSOS)
 	}
 
 	// ==========================================
@@ -394,6 +405,31 @@ func NewRouter(
 	{
 		adminZones.POST("/assign", geofenceContainer.Handler.AssignDriverToZone)
 		adminZones.DELETE("/drivers/:driverId/zones/:zoneId", geofenceContainer.Handler.RemoveDriverFromZone)
+	}
+
+	// ==========================================
+	// ADMIN SETTINGS & VEHICLES ROUTES
+	// ==========================================
+	adminSettings := engine.Group("/api/v1/admin/settings")
+	adminSettings.Use(
+		authContainer.Middleware.Authenticate(),
+		authContainer.AdminMiddleware.RequireAdmin(),
+	)
+	{
+		adminSettings.GET("", settingsContainer.Handler.GetPlatformSettings)
+		adminSettings.PUT("", settingsContainer.Handler.UpdatePlatformSettings)
+	}
+
+	adminVehicles := engine.Group("/api/v1/admin/vehicles")
+	adminVehicles.Use(
+		authContainer.Middleware.Authenticate(),
+		authContainer.AdminMiddleware.RequireAdmin(),
+	)
+	{
+		adminVehicles.POST("", settingsContainer.Handler.CreateVehicleType)
+		adminVehicles.GET("", settingsContainer.Handler.ListVehicleTypes)
+		adminVehicles.PUT("/:id", settingsContainer.Handler.UpdateVehicleType)
+		adminVehicles.DELETE("/:id", settingsContainer.Handler.DeleteVehicleType)
 	}
 
 	// ==========================================

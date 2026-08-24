@@ -3,12 +3,14 @@ package usecases
 import (
 	"context"
 	"crypto/rand"
+	"errors" 
 	"fmt"
 	"math/big"
 	"time"
 
 	"github.com/google/uuid"
 
+	settingsRepos "github.com/yourorg/ehailing/backend/internal/settings/domain/repositories"
 	"github.com/yourorg/ehailing/backend/internal/trip/domain"
 	"github.com/yourorg/ehailing/backend/internal/trip/domain/entities"
 	"github.com/yourorg/ehailing/backend/internal/trip/domain/repositories"
@@ -17,6 +19,7 @@ import (
 
 type CreateTripInput struct {
 	PassengerID         uuid.UUID
+	VehicleTypeSlug     string
 	PickupLatitude      float64
 	PickupLongitude     float64
 	PickupAddress       string
@@ -29,6 +32,7 @@ type CreateTripInput struct {
 
 type CreateTrip struct {
 	tripRepo       repositories.TripRepository
+	vehicleRepo    settingsRepos.VehicleTypeRepository
 	fareCalc       *services.FareCalculator
 	eventService   *services.TripEventService
 	promoRedeemer  services.PromotionRedeemer
@@ -38,6 +42,7 @@ type CreateTrip struct {
 
 func NewCreateTrip(
 	tripRepo repositories.TripRepository,
+	vehicleRepo settingsRepos.VehicleTypeRepository,
 	fareCalc *services.FareCalculator,
 	eventService *services.TripEventService,
 	promoRedeemer services.PromotionRedeemer,
@@ -46,6 +51,7 @@ func NewCreateTrip(
 ) *CreateTrip {
 	return &CreateTrip{
 		tripRepo:       tripRepo,
+		vehicleRepo:    vehicleRepo, // <-- ADD THIS
 		fareCalc:       fareCalc,
 		eventService:   eventService,
 		promoRedeemer:  promoRedeemer,
@@ -89,9 +95,21 @@ func (uc *CreateTrip) Execute(ctx context.Context, input CreateTripInput) (*enti
 		}
 	}
 
-	baseFare := uc.fareCalc.Calculate(routeResult.DistanceKM, routeResult.DurationMinutes)
+	// 1. Fetch Vehicle Type from Database (No Hardcoded Fares!)
+	vehicleType, err := uc.vehicleRepo.GetBySlug(ctx, input.VehicleTypeSlug)
+	if err != nil {
+		return nil, err
+	}
+	if vehicleType == nil {
+		return nil, errors.New("invalid_vehicle_type")
+	}
 
-	// Apply surge multiplier
+	// 2. Calculate Base Fare Dynamically from Admin-Managed Settings
+	baseFare := vehicleType.BaseFare +
+		(routeResult.DistanceKM * vehicleType.PerKmRate) +
+		(float64(routeResult.DurationMinutes) * vehicleType.PerMinRate)
+
+	// 3. Apply surge multiplier
 	surgeMultiplier := 1.0
 	if uc.surgeService != nil {
 		_ = uc.surgeService.RecordDemand(ctx, input.PickupLatitude, input.PickupLongitude)

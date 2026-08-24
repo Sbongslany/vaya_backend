@@ -15,11 +15,18 @@ type AdminContainer struct {
 func WireAdmin(pgPool *pgxpool.Pool) *AdminContainer {
 	adminRepo := postgres.NewAdminRepository(pgPool)
 
+	// Phase 17: Existing Dashboard Use Cases
 	getOverviewUC := usecases.NewGetPlatformOverview(adminRepo)
 	getFinancialUC := usecases.NewGetFinancialSummary(adminRepo)
 	listUsersUC := usecases.NewListUsers(adminRepo)
 	updateUserStatusUC := usecases.NewUpdateUserStatus(adminRepo)
 	listTripsUC := usecases.NewListAllTrips(adminRepo)
+
+	// Phase B: New Live Operations Use Cases
+	getLiveMapUC := usecases.NewGetLiveMap(adminRepo)
+	forceCancelUC := usecases.NewForceCancelTrip(adminRepo)
+	forceCompleteUC := usecases.NewForceCompleteTrip(adminRepo)
+	getActiveSOSUC := usecases.NewGetActiveSOS(adminRepo)
 
 	handler := handlers.NewAdminHandler(
 		getOverviewUC,
@@ -27,6 +34,10 @@ func WireAdmin(pgPool *pgxpool.Pool) *AdminContainer {
 		listUsersUC,
 		updateUserStatusUC,
 		listTripsUC,
+		getLiveMapUC,
+		forceCancelUC,
+		forceCompleteUC,
+		getActiveSOSUC,
 	)
 
 	return &AdminContainer{

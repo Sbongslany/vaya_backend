@@ -120,12 +120,15 @@ func NewTripHandler(
 // ==========================================
 
 type CreateTripRequest struct {
-	PickupLatitude   float64 `json:"pickup_latitude" binding:"required"`
-	PickupLongitude  float64 `json:"pickup_longitude" binding:"required"`
-	PickupAddress    string  `json:"pickup_address" binding:"required"`
-	DropoffLatitude  float64 `json:"dropoff_latitude" binding:"required"`
-	DropoffLongitude float64 `json:"dropoff_longitude" binding:"required"`
-	DropoffAddress   string  `json:"dropoff_address" binding:"required"`
+	VehicleTypeSlug     string     `json:"vehicle_type_slug" binding:"required"` // <-- ADD THIS
+	PickupLatitude      float64    `json:"pickup_latitude" binding:"required"`
+	PickupLongitude     float64    `json:"pickup_longitude" binding:"required"`
+	PickupAddress       string     `json:"pickup_address" binding:"required"`
+	DropoffLatitude     float64    `json:"dropoff_latitude" binding:"required"`
+	DropoffLongitude    float64    `json:"dropoff_longitude" binding:"required"`
+	DropoffAddress      string     `json:"dropoff_address" binding:"required"`
+	PromoCode           string     `json:"promo_code"`
+	ScheduledPickupTime *time.Time `json:"scheduled_pickup_time"`
 }
 
 // CreateTrip godoc
@@ -162,6 +165,7 @@ func (h *TripHandler) CreateTrip(c *gin.Context) {
 
 	trip, err := h.createTrip.Execute(c.Request.Context(), usecases.CreateTripInput{
 		PassengerID:      userID,
+		VehicleTypeSlug:  req.VehicleTypeSlug, // <-- ADD THIS
 		PickupLatitude:   req.PickupLatitude,
 		PickupLongitude:  req.PickupLongitude,
 		PickupAddress:    req.PickupAddress,

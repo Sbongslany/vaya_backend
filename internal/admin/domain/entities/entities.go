@@ -6,6 +6,8 @@ import (
 	"github.com/google/uuid"
 )
 
+// --- Phase 17: Existing Admin Entities ---
+
 type UserRole string
 
 const (
@@ -56,4 +58,47 @@ type FinancialSummary struct {
 	TotalCommission    float64
 	TotalDriverPayouts float64
 	TotalRefunds       float64
+}
+
+// --- Phase B: New Live Operations Entities ---
+
+type AdminAuditLog struct {
+	ID           uuid.UUID
+	AdminID      uuid.UUID
+	Action       string
+	ResourceType string
+	ResourceID   *uuid.UUID
+	Details      string
+	CreatedAt    time.Time
+}
+
+type LiveTrip struct {
+	ID             uuid.UUID
+	Status         string
+	PassengerID    uuid.UUID
+	DriverID       *uuid.UUID
+	PickupAddress  string
+	DropoffAddress string
+	PickupLat      float64
+	PickupLng      float64
+	DropoffLat     float64
+	DropoffLng     float64
+	EstimatedFare  float64
+	CreatedAt      time.Time
+}
+
+type LiveDriver struct {
+	ID        uuid.UUID
+	Email     string
+	Status    string
+	Latitude  float64
+	Longitude float64
+}
+
+type LiveSOS struct {
+	ID          uuid.UUID
+	TripID      uuid.UUID
+	TriggeredBy uuid.UUID
+	Status      string
+	TriggeredAt time.Time
 }

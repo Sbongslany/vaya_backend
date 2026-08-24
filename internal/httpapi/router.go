@@ -23,6 +23,12 @@ import (
 	supportDep "github.com/yourorg/ehailing/backend/internal/support/dependency"
 	tripDep "github.com/yourorg/ehailing/backend/internal/trip/dependency"
 	walletDep "github.com/yourorg/ehailing/backend/internal/wallet/dependency"
+
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
+
+	// This imports the generated docs folder (we will create it in Step 4)
+	_ "github.com/yourorg/ehailing/backend/docs"
 )
 
 func NewRouter(
@@ -393,9 +399,10 @@ func NewRouter(
 	// ==========================================
 	// OPENAPI DOCUMENTATION
 	// ==========================================
-	engine.GET("/api/v1/docs/openapi.yaml", func(c *gin.Context) {
-		c.File("api/openapi/auth.yaml")
-	})
+	// ==========================================
+	// SWAGGER DOCUMENTATION UI
+	// ==========================================
+	engine.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	return engine
 }

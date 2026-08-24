@@ -37,6 +37,29 @@ import (
 	"github.com/yourorg/ehailing/backend/internal/workers/jobs"
 )
 
+// @title           Vaya E-Hailing API
+// @version         1.0
+// @description     This is a complete, production-ready e-hailing backend API.
+// @termsOfService  http://swagger.io/terms/
+
+// @contact.name   API Support
+// @contact.url    http://www.vaya.co.za/support
+// @contact.email  support@vaya.co.za
+
+// @license.name  Apache 2.0
+// @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host      localhost:8080
+// @BasePath  /api/v1
+
+// @securityDefinitions.basic  BasicAuth
+// @securityDefinitions.apikey BearerAuth
+// @in                         header
+// @name                       Authorization
+// @description                Enter your Bearer token in the format: Bearer {token}
+
+// ... rest of your existing main.go code ...
+
 func main() {
 	// Load environment variables from .env.
 	// This must happen before config.Load().

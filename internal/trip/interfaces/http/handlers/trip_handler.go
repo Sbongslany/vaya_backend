@@ -128,6 +128,20 @@ type CreateTripRequest struct {
 	DropoffAddress   string  `json:"dropoff_address" binding:"required"`
 }
 
+// CreateTrip godoc
+// @Summary      Create a new trip
+// @Description  Passenger requests a new ride. Calculates route, applies surge, and finds nearby drivers.
+// @Tags         Trips
+// @Accept       json
+// @Produce      json
+// @Security     BearerAuth
+// @Param        request body CreateTripRequest true "Trip creation payload"
+// @Success      201 {object} entities.Trip "Trip created successfully"
+// @Failure      400 {object} map[string]string "Invalid request payload"
+// @Failure      401 {object} map[string]string "Unauthorized"
+// @Failure      409 {object} map[string]string "Passenger already has an active trip"
+// @Router       /trips [post]
+
 func (h *TripHandler) CreateTrip(c *gin.Context) {
 	userIDStr, exists := c.Get(authMiddleware.UserIDKey)
 	if !exists {

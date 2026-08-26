@@ -17,9 +17,10 @@ type User struct {
 	Status          domain.UserStatus
 	EmailVerifiedAt *time.Time
 	PhoneVerifiedAt *time.Time
+	Roles           []domain.Role
+	AdminRole       *AdminRole `json:"admin_role,omitempty"`
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
-	Roles           []domain.Role
 }
 
 func (u *User) HasRole(role domain.Role) bool {
@@ -36,5 +37,7 @@ func (u *User) IsAdmin() bool {
 		u.HasRole(domain.RoleSuperAdmin) ||
 		u.HasRole(domain.RoleSupportAdmin) ||
 		u.HasRole(domain.RoleSafetyAdmin) ||
-		u.HasRole(domain.RoleFinanceAdmin)
+		u.HasRole(domain.RoleFinanceAdmin) ||
+		u.HasRole(domain.RoleOperationsAdmin) // <-- ADD THIS
+
 }

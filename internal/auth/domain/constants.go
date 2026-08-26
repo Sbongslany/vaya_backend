@@ -3,13 +3,14 @@ package domain
 type Role string
 
 const (
-	RolePassenger     Role = "PASSENGER"
-	RoleDriver        Role = "DRIVER"
-	RoleAdmin         Role = "ADMIN"
-	RoleSuperAdmin    Role = "SUPER_ADMIN"
-	RoleSupportAdmin  Role = "SUPPORT_ADMIN"
-	RoleSafetyAdmin   Role = "SAFETY_ADMIN"
-	RoleFinanceAdmin  Role = "FINANCE_ADMIN"
+	RolePassenger       Role = "PASSENGER"
+	RoleDriver          Role = "DRIVER"
+	RoleAdmin           Role = "ADMIN"
+	RoleSuperAdmin      Role = "SUPER_ADMIN"
+	RoleSupportAdmin    Role = "SUPPORT_ADMIN"
+	RoleSafetyAdmin     Role = "SAFETY_ADMIN"
+	RoleFinanceAdmin    Role = "FINANCE_ADMIN"
+	RoleOperationsAdmin Role = "OPERATIONS_ADMIN"
 )
 
 type UserStatus string
@@ -63,3 +64,5 @@ const (
 	AuditActionAccessDenied          AuditAction = "ACCESS_DENIED"
 	AuditActionRateLimited           AuditAction = "RATE_LIMITED"
 )
+
+///

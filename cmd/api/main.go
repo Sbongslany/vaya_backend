@@ -31,6 +31,7 @@ import (
 	walletDep "github.com/yourorg/ehailing/backend/internal/wallet/dependency"
 	"github.com/yourorg/ehailing/backend/migrations"
 
+	"github.com/yourorg/ehailing/backend/internal/auth/infrastructure/security"
 	safetyPostgres "github.com/yourorg/ehailing/backend/internal/safety/infrastructure/persistence/postgres"
 	settingsDep "github.com/yourorg/ehailing/backend/internal/settings/dependency"
 	tripPostgres "github.com/yourorg/ehailing/backend/internal/trip/infrastructure/persistence/postgres"
@@ -128,7 +129,9 @@ func main() {
 
 	supportContainer := supportDep.WireSupport(pgPool, walletContainer)
 
-	adminContainer := adminDep.WireAdmin(pgPool, nil)
+	passwordSvc := security.NewPasswordService()
+
+	adminContainer := adminDep.WireAdmin(pgPool, nil, passwordSvc)
 
 	kycContainer := kycDep.WireKYC(pgPool)
 

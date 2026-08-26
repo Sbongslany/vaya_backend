@@ -932,6 +932,21 @@ func NewRouter(
 	}
 
 	// ==========================================
+	// ADMIN MANAGEMENT ROUTES (Super Admin ONLY)
+	// ==========================================
+	adminMgmt := engine.Group("/api/v1/admin/manage")
+	adminMgmt.Use(
+		authContainer.Middleware.Authenticate(),
+		authContainer.AdminMiddleware.RequireAdmin(),
+		authContainer.Middleware.RequireRole(domain.RoleSuperAdmin),
+	)
+	{
+		adminMgmt.GET("/admins", adminContainer.Handler.ListAdmins)
+		adminMgmt.POST("/admins", adminContainer.Handler.CreateAdmin)
+		adminMgmt.PATCH("/admins/role", adminContainer.Handler.UpdateAdminRole)
+		adminMgmt.PATCH("/admins/status", adminContainer.Handler.UpdateAdminStatus)
+	}
+	// ==========================================
 	// OPENAPI DOCUMENTATION
 	// ==========================================
 	// ==========================================

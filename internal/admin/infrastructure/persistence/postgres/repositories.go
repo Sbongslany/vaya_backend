@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/yourorg/ehailing/backend/internal/admin/domain/entities"
+	authEntities "github.com/yourorg/ehailing/backend/internal/auth/domain/entities"
 )
 
 type AdminRepository struct {
@@ -43,7 +44,7 @@ func (r *AdminRepository) GetPlatformStats(ctx context.Context) (*entities.Platf
 	if err != nil {
 		return nil, err
 	}
-	stats.TotalCommission = stats.TotalRevenue * 0.20 
+	stats.TotalCommission = stats.TotalRevenue * 0.20
 	return stats, nil
 }
 
@@ -280,7 +281,7 @@ func (r *AdminRepository) ApprovePayout(ctx context.Context, payoutID uuid.UUID,
 	if err != nil {
 		return err
 	}
-	
+
 	return r.CreateAuditLog(ctx, &entities.AdminAuditLog{
 		ID: uuid.New(), AdminID: adminID, Action: "APPROVE_PAYOUT", ResourceType: "PAYOUT", ResourceID: &payoutID, Details: "Payout approved by admin", CreatedAt: time.Now(),
 	})
@@ -292,8 +293,95 @@ func (r *AdminRepository) RejectPayout(ctx context.Context, payoutID uuid.UUID, 
 	if err != nil {
 		return err
 	}
-	
+
 	return r.CreateAuditLog(ctx, &entities.AdminAuditLog{
 		ID: uuid.New(), AdminID: adminID, Action: "REJECT_PAYOUT", ResourceType: "PAYOUT", ResourceID: &payoutID, Details: "Rejected: " + reason, CreatedAt: time.Now(),
 	})
+}
+
+// ==========================================
+// PHASE 3: ADMIN MANAGEMENT IMPLEMENTATIONS
+// ==========================================
+
+func (r *AdminRepository) CreateAdmin(ctx context.Context, user *authEntities.User, roleName string) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	// 1. Create the user in auth.users
+	userQuery := `
+		INSERT INTO auth.users (id, first_name, last_name, email, password_hash, status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, 'ACTIVE', NOW(), NOW())
+	`
+	_, err = tx.Exec(ctx, userQuery, user.ID, user.FirstName, user.LastName, user.Email, user.PasswordHash)
+	if err != nil {
+		return err
+	}
+
+	// 2. Assign the specific admin role via auth.user_roles
+	roleQuery := `
+		INSERT INTO auth.user_roles (user_id, role_id)
+		SELECT $1, id FROM auth.roles WHERE name = $2
+	`
+	_, err = tx.Exec(ctx, roleQuery, user.ID, roleName)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (r *AdminRepository) ListAdmins(ctx context.Context) ([]*entities.AdminSummary, error) {
+	query := `
+		SELECT u.id, u.first_name, u.last_name, u.email, u.status, r.name as role_name, u.created_at
+		FROM auth.users u
+		JOIN auth.user_roles ur ON u.id = ur.user_id
+		JOIN auth.roles r ON ur.role_id = r.id
+		WHERE r.name IN ('SUPER_ADMIN', 'OPERATIONS_ADMIN', 'FINANCE_ADMIN', 'SUPPORT_ADMIN', 'SAFETY_ADMIN')
+		ORDER BY u.created_at DESC
+	`
+	rows, err := r.pool.Query(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var admins []*entities.AdminSummary
+	for rows.Next() {
+		a := &entities.AdminSummary{}
+		if err := rows.Scan(&a.ID, &a.FirstName, &a.LastName, &a.Email, &a.Status, &a.Role, &a.CreatedAt); err != nil {
+			return nil, err
+		}
+		admins = append(admins, a)
+	}
+	return admins, rows.Err()
+}
+
+func (r *AdminRepository) UpdateAdminRole(ctx context.Context, userID uuid.UUID, roleName string) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	// Remove all existing roles for this user
+	_, err = tx.Exec(ctx, `DELETE FROM auth.user_roles WHERE user_id = $1`, userID)
+	if err != nil {
+		return err
+	}
+
+	// Add the new role
+	_, err = tx.Exec(ctx, `INSERT INTO auth.user_roles (user_id, role_id) SELECT $1, id FROM auth.roles WHERE name = $2`, userID, roleName)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (r *AdminRepository) UpdateAdminStatus(ctx context.Context, userID uuid.UUID, status string) error {
+	_, err := r.pool.Exec(ctx, `UPDATE auth.users SET status = $1, updated_at = NOW() WHERE id = $2`, status, userID)
+	return err
 }

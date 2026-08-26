@@ -30,6 +30,9 @@ type AdminHandler struct {
 	getPendingPayoutsUC     *usecases.GetPendingPayouts
 	processPayoutApprovalUC *usecases.ProcessPayoutApproval
 	rejectPayoutUC          *usecases.RejectPayout
+
+		// Phase 3: Admin Management
+	adminMgmtUCs *usecases.AdminManagementUCs
 }
 
 func NewAdminHandler(
@@ -48,6 +51,9 @@ func NewAdminHandler(
 	getPendingPayoutsUC *usecases.GetPendingPayouts,
 	processPayoutApprovalUC *usecases.ProcessPayoutApproval,
 	rejectPayoutUC *usecases.RejectPayout,
+	adminMgmtUCs *usecases.AdminManagementUCs, // <-- ADD THIS
+
+
 ) *AdminHandler {
 	return &AdminHandler{
 		getOverviewUC:           getOverviewUC,
@@ -62,6 +68,7 @@ func NewAdminHandler(
 		getPendingPayoutsUC:     getPendingPayoutsUC,
 		processPayoutApprovalUC: processPayoutApprovalUC,
 		rejectPayoutUC:          rejectPayoutUC,
+		adminMgmtUCs:            adminMgmtUCs, // <-- ADD THIS
 	}
 }
 
@@ -291,4 +298,105 @@ func (h *AdminHandler) RejectPayout(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "payout_rejected"})
+}
+
+// --- Phase 3: Admin Management Handlers ---
+
+func (h *AdminHandler) ListAdmins(c *gin.Context) {
+	admins, err := h.adminMgmtUCs.ListAdmins(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed_to_fetch_admins"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"admins": admins})
+}
+
+type CreateAdminRequest struct {
+	FirstName string `json:"first_name" binding:"required"`
+	LastName  string `json:"last_name" binding:"required"`
+	Email     string `json:"email" binding:"required,email"`
+	Role      string `json:"role" binding:"required"`
+}
+
+func (h *AdminHandler) CreateAdmin(c *gin.Context) {
+	var req CreateAdminRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+		return
+	}
+
+	tempPwd, err := h.adminMgmtUCs.CreateAdmin(c.Request.Context(), usecases.CreateAdminInput{
+		FirstName: req.FirstName, LastName: req.LastName, Email: req.Email, Role: req.Role,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed_to_create_admin", "details": err.Error()})
+		return
+	}
+
+	// Return the temporary password so the Super Admin can share it securely
+	c.JSON(http.StatusCreated, gin.H{
+		"message": "admin_created_successfully",
+		"temporary_password": tempPwd,
+		"instruction": "Share this password securely with the new admin. They should change it on first login.",
+	})
+}
+
+type UpdateAdminRoleRequest struct {
+	TargetAdminID string `json:"target_admin_id" binding:"required"`
+	Role          string `json:"role" binding:"required"`
+}
+
+func (h *AdminHandler) UpdateAdminRole(c *gin.Context) {
+	adminIDStr, _ := c.Get(authMiddleware.UserIDKey)
+	actingAdminID, _ := uuid.Parse(adminIDStr.(string))
+
+	var req UpdateAdminRoleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+		return
+	}
+
+	targetID, err := uuid.Parse(req.TargetAdminID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_target_id"})
+		return
+	}
+
+	if err := h.adminMgmtUCs.UpdateAdminRole(c.Request.Context(), usecases.UpdateAdminRoleInput{
+		ActingAdminID: actingAdminID, TargetAdminID: targetID, Role: req.Role,
+	}); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "admin_role_updated"})
+}
+
+type UpdateAdminStatusRequest struct {
+	TargetAdminID string `json:"target_admin_id" binding:"required"`
+	Status        string `json:"status" binding:"required"` // ACTIVE or DISABLED
+}
+
+func (h *AdminHandler) UpdateAdminStatus(c *gin.Context) {
+	adminIDStr, _ := c.Get(authMiddleware.UserIDKey)
+	actingAdminID, _ := uuid.Parse(adminIDStr.(string))
+
+	var req UpdateAdminStatusRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_request"})
+		return
+	}
+
+	targetID, err := uuid.Parse(req.TargetAdminID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_target_id"})
+		return
+	}
+
+	if err := h.adminMgmtUCs.UpdateAdminStatus(c.Request.Context(), usecases.UpdateAdminStatusInput{
+		ActingAdminID: actingAdminID, TargetAdminID: targetID, Status: req.Status,
+	}); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "admin_status_updated"})
 }

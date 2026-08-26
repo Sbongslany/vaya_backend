@@ -2,6 +2,8 @@ package usecases
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"time"
 
@@ -9,6 +11,8 @@ import (
 
 	"github.com/yourorg/ehailing/backend/internal/admin/domain/entities"
 	"github.com/yourorg/ehailing/backend/internal/admin/domain/repositories"
+	"github.com/yourorg/ehailing/backend/internal/auth/domain/services"
+	authEntities "github.com/yourorg/ehailing/backend/internal/auth/domain/entities"
 )
 
 // ==========================================
@@ -216,4 +220,83 @@ func (uc *ProcessPayoutApproval) Execute(ctx context.Context, input ProcessPayou
 
 	// 3. Update database status to APPROVED
 	return uc.repo.ApprovePayout(ctx, input.PayoutID, input.AdminID)
+}
+// ==========================================
+// PHASE 3: ADMIN MANAGEMENT USE CASES
+// ==========================================
+
+type AdminManagementUCs struct {
+	repo        repositories.AdminRepository
+	passwordSvc services.PasswordService
+}
+
+func NewAdminManagementUCs(repo repositories.AdminRepository, passwordSvc services.PasswordService) *AdminManagementUCs {
+	return &AdminManagementUCs{repo: repo, passwordSvc: passwordSvc}
+}
+
+func generateSecurePassword() string {
+	b := make([]byte, 12)
+	rand.Read(b)
+	return base64.URLEncoding.EncodeToString(b)
+}
+
+type CreateAdminInput struct {
+	FirstName string
+	LastName  string
+	Email     string
+	Role      string
+}
+
+func (uc *AdminManagementUCs) CreateAdmin(ctx context.Context, input CreateAdminInput) (string, error) {
+	tempPassword := generateSecurePassword()
+	hash, err := uc.passwordSvc.HashPassword(tempPassword)
+	if err != nil {
+		return "", err
+	}
+
+	emailStr := input.Email
+
+	user := &authEntities.User{
+		ID:           uuid.New(),
+		FirstName:    input.FirstName,
+		LastName:     input.LastName,
+		Email:        &emailStr,
+		PasswordHash: hash,
+	}
+
+	if err := uc.repo.CreateAdmin(ctx, user, input.Role); err != nil {
+		return "", err
+	}
+
+	return tempPassword, nil
+}
+
+func (uc *AdminManagementUCs) ListAdmins(ctx context.Context) ([]*entities.AdminSummary, error) {
+	return uc.repo.ListAdmins(ctx)
+}
+
+type UpdateAdminRoleInput struct {
+	ActingAdminID uuid.UUID
+	TargetAdminID uuid.UUID
+	Role          string
+}
+
+func (uc *AdminManagementUCs) UpdateAdminRole(ctx context.Context, input UpdateAdminRoleInput) error {
+	if input.ActingAdminID == input.TargetAdminID {
+		return fmt.Errorf("cannot_change_own_role")
+	}
+	return uc.repo.UpdateAdminRole(ctx, input.TargetAdminID, input.Role)
+}
+
+type UpdateAdminStatusInput struct {
+	ActingAdminID uuid.UUID
+	TargetAdminID uuid.UUID
+	Status        string
+}
+
+func (uc *AdminManagementUCs) UpdateAdminStatus(ctx context.Context, input UpdateAdminStatusInput) error {
+	if input.ActingAdminID == input.TargetAdminID {
+		return fmt.Errorf("cannot_deactivate_own_account")
+	}
+	return uc.repo.UpdateAdminStatus(ctx, input.TargetAdminID, input.Status)
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/yourorg/ehailing/backend/internal/admin/domain/entities"
+	authEntities "github.com/yourorg/ehailing/backend/internal/auth/domain/entities" // <-- ADD THIS
 )
 
 type AdminRepository interface {
@@ -30,4 +31,10 @@ type AdminRepository interface {
 	GetPayoutByID(ctx context.Context, payoutID uuid.UUID) (*entities.PayoutDetails, error)
 	ApprovePayout(ctx context.Context, payoutID uuid.UUID, adminID uuid.UUID) error
 	RejectPayout(ctx context.Context, payoutID uuid.UUID, adminID uuid.UUID, reason string) error
+
+	// Phase 3: Admin Management
+	CreateAdmin(ctx context.Context, user *authEntities.User, roleName string) error
+	ListAdmins(ctx context.Context) ([]*entities.AdminSummary, error)
+	UpdateAdminRole(ctx context.Context, userID uuid.UUID, roleName string) error
+	UpdateAdminStatus(ctx context.Context, userID uuid.UUID, status string) error
 }

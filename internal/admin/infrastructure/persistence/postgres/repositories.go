@@ -171,11 +171,11 @@ func (r *AdminRepository) ListAllTrips(ctx context.Context, limit, offset int, s
 
 func (r *AdminRepository) ListActiveTrips(ctx context.Context) ([]*entities.LiveTrip, error) {
 	query := `
-		SELECT id, status, passenger_id, driver_id, pickup_address, dropoff_address,
+		SELECT id, status::text, passenger_id, driver_id, pickup_address, dropoff_address,
 			pickup_latitude, pickup_longitude, dropoff_latitude, dropoff_longitude,
 			estimated_fare, created_at
 		FROM trips
-		WHERE status IN ('REQUESTED', 'DRIVER_ASSIGNED', 'DRIVER_EN_ROUTE', 'ARRIVED_AT_PICKUP', 'IN_PROGRESS', 'TRIP_COMPLETED')
+		WHERE status::text = ANY(ARRAY['REQUESTED', 'DRIVER_ASSIGNED', 'DRIVER_EN_ROUTE', 'ARRIVED_AT_PICKUP', 'IN_PROGRESS', 'ASSIGNED', 'ACCEPTED']::text[])
 		ORDER BY created_at DESC LIMIT 200
 	`
 	rows, err := r.pool.Query(ctx, query)
@@ -198,9 +198,16 @@ func (r *AdminRepository) ListActiveTrips(ctx context.Context) ([]*entities.Live
 
 func (r *AdminRepository) ListOnlineDrivers(ctx context.Context) ([]*entities.LiveDriver, error) {
 	query := `
-		SELECT u.id, u.email, 'ONLINE' as status, 0.0 as latitude, 0.0 as longitude
+		SELECT 
+			u.id, 
+			COALESCE(u.email, ''), 
+			'ONLINE' as status, 
+			0.0 as latitude, 
+			0.0 as longitude
 		FROM auth.users u
-		WHERE u.role = 'DRIVER' AND u.status = 'ACTIVE'
+		JOIN auth.user_roles ur ON u.id = ur.user_id
+		JOIN auth.roles r ON ur.role_id = r.id
+		WHERE r.name = 'DRIVER' AND u.status::text = 'ACTIVE'
 		LIMIT 200
 	`
 	rows, err := r.pool.Query(ctx, query)

@@ -162,7 +162,11 @@ func (h *AdminHandler) ListAllTrips(c *gin.Context) {
 func (h *AdminHandler) GetLiveMap(c *gin.Context) {
 	trips, drivers, err := h.getLiveMapUC.Execute(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed_to_fetch_live_map"})
+		// ADD "details" to see the exact database error
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "failed_to_fetch_live_map",
+			"details": err.Error(),
+		})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"trips": trips, "drivers": drivers})

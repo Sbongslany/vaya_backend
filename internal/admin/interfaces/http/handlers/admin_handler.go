@@ -247,7 +247,11 @@ func (h *AdminHandler) GetActiveSOS(c *gin.Context) {
 func (h *AdminHandler) GetPendingPayouts(c *gin.Context) {
 	payouts, err := h.getPendingPayoutsUC.Execute(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed_to_fetch_payouts"})
+		// ADD "details" to see the exact database error
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "failed_to_fetch_payouts",
+			"details": err.Error(),
+		})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"payouts": payouts})

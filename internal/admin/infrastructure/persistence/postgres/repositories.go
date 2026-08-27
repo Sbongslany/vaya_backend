@@ -268,9 +268,16 @@ func (r *AdminRepository) CreateAuditLog(ctx context.Context, log *entities.Admi
 
 func (r *AdminRepository) ListPendingPayouts(ctx context.Context) ([]*entities.PayoutSummary, error) {
 	query := `
-		SELECT id, driver_id, amount, bank_name, account_number, status, created_at 
+		SELECT 
+			id, 
+			user_id, 
+			amount, 
+			bank_name, 
+			bank_account_number, 
+			status::text, 
+			created_at 
 		FROM payouts 
-		WHERE status = 'PENDING' 
+		WHERE status::text = 'PENDING' 
 		ORDER BY created_at ASC
 	`
 	rows, err := r.pool.Query(ctx, query)
@@ -291,7 +298,7 @@ func (r *AdminRepository) ListPendingPayouts(ctx context.Context) ([]*entities.P
 }
 
 func (r *AdminRepository) GetPayoutByID(ctx context.Context, payoutID uuid.UUID) (*entities.PayoutDetails, error) {
-	query := `SELECT id, driver_id, amount, bank_code, account_number, status FROM payouts WHERE id = $1`
+	query := `SELECT id, user_id, amount, bank_name, bank_account_number, status::text FROM payouts WHERE id = $1`
 	p := &entities.PayoutDetails{}
 	err := r.pool.QueryRow(ctx, query, payoutID).Scan(&p.ID, &p.DriverID, &p.Amount, &p.BankCode, &p.AccountNumber, &p.Status)
 	if err != nil {

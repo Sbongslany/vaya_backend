@@ -28,14 +28,15 @@ func NewAdminRepository(pool *pgxpool.Pool) *AdminRepository {
 
 func (r *AdminRepository) GetPlatformStats(ctx context.Context) (*entities.PlatformStats, error) {
 	stats := &entities.PlatformStats{}
+
 	query := `
 		SELECT 
 			(SELECT COUNT(*) FROM auth.users) as total_users,
-			(SELECT COUNT(*) FROM auth.users WHERE role = 'DRIVER') as total_drivers,
-			(SELECT COUNT(*) FROM auth.users WHERE role = 'PASSENGER') as total_passengers,
+			(SELECT COUNT(DISTINCT ur.user_id) FROM auth.user_roles ur JOIN auth.roles r ON ur.role_id = r.id WHERE r.name = 'DRIVER') as total_drivers,
+			(SELECT COUNT(DISTINCT ur.user_id) FROM auth.user_roles ur JOIN auth.roles r ON ur.role_id = r.id WHERE r.name = 'PASSENGER') as total_passengers,
 			(SELECT COUNT(*) FROM trips) as total_trips,
-			(SELECT COUNT(*) FROM trips WHERE status IN ('REQUESTED', 'DRIVER_ASSIGNED', 'DRIVER_EN_ROUTE', 'ARRIVED_AT_PICKUP', 'IN_PROGRESS')) as active_trips,
-			COALESCE((SELECT SUM(final_fare) FROM trips WHERE status IN ('PAYMENT_COMPLETED', 'TRIP_COMPLETED')), 0) as total_revenue
+			(SELECT COUNT(*) FROM trips WHERE status::text = ANY(ARRAY['REQUESTED', 'DRIVER_ASSIGNED', 'DRIVER_EN_ROUTE', 'ARRIVED_AT_PICKUP', 'IN_PROGRESS', 'ASSIGNED', 'ACCEPTED']::text[])) as active_trips,
+			COALESCE((SELECT SUM(actual_fare) FROM trips WHERE status::text = ANY(ARRAY['PAYMENT_COMPLETED', 'TRIP_COMPLETED', 'COMPLETED']::text[])), 0) as total_revenue
 	`
 	err := r.pool.QueryRow(ctx, query).Scan(
 		&stats.TotalUsers, &stats.TotalDrivers, &stats.TotalPassengers,
@@ -52,12 +53,12 @@ func (r *AdminRepository) GetFinancialSummary(ctx context.Context, startDate, en
 	summary := &entities.FinancialSummary{}
 	query := `
 		SELECT 
-			COALESCE(SUM(final_fare), 0),
-			COALESCE(SUM(final_fare * 0.20), 0),
+			COALESCE(SUM(actual_fare), 0),
+			COALESCE(SUM(actual_fare * 0.20), 0),
 			0, 
 			0  
 		FROM trips
-		WHERE status IN ('PAYMENT_COMPLETED', 'TRIP_COMPLETED')
+		WHERE status::text = ANY(ARRAY['PAYMENT_COMPLETED', 'TRIP_COMPLETED', 'COMPLETED']::text[])
 	`
 	args := []interface{}{}
 	if !startDate.IsZero() && !endDate.IsZero() {
@@ -73,22 +74,31 @@ func (r *AdminRepository) GetFinancialSummary(ctx context.Context, startDate, en
 }
 
 func (r *AdminRepository) ListUsers(ctx context.Context, limit, offset int, role, status string) ([]*entities.UserSummary, error) {
-	query := `SELECT id, email, role, status, created_at FROM auth.users WHERE 1=1`
+	query := `
+		SELECT 
+			u.id, 
+			COALESCE(u.email, 'no-email@vaya.co.za') as email,
+			COALESCE((SELECT r.name FROM auth.user_roles ur JOIN auth.roles r ON ur.role_id = r.id WHERE ur.user_id = u.id LIMIT 1), 'UNKNOWN') as role, 
+			u.status::text, 
+			u.created_at 
+		FROM auth.users u
+		WHERE 1=1
+	`
 	args := []interface{}{}
 	argID := 1
 
 	if role != "" {
-		query += fmt.Sprintf(" AND role = $%d", argID)
+		query += fmt.Sprintf(" AND u.id IN (SELECT ur.user_id FROM auth.user_roles ur JOIN auth.roles r ON ur.role_id = r.id WHERE r.name = $%d)", argID)
 		args = append(args, role)
 		argID++
 	}
 	if status != "" {
-		query += fmt.Sprintf(" AND status = $%d", argID)
+		query += fmt.Sprintf(" AND u.status::text = $%d", argID)
 		args = append(args, status)
 		argID++
 	}
 
-	query += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d OFFSET $%d", argID, argID+1)
+	query += fmt.Sprintf(" ORDER BY u.created_at DESC LIMIT $%d OFFSET $%d", argID, argID+1)
 	args = append(args, limit, offset)
 
 	rows, err := r.pool.Query(ctx, query, args...)
@@ -114,12 +124,23 @@ func (r *AdminRepository) UpdateUserStatus(ctx context.Context, userID uuid.UUID
 }
 
 func (r *AdminRepository) ListAllTrips(ctx context.Context, limit, offset int, status string) ([]*entities.TripSummary, error) {
-	query := `SELECT id, passenger_id, driver_id, status, trip_type, estimated_fare, final_fare, created_at FROM trips WHERE 1=1`
+	query := `
+		SELECT 
+			id, 
+			passenger_id, 
+			driver_id, 
+			status::text as status, 
+			'Standard' as trip_type, 
+			estimated_fare, 
+			actual_fare as final_fare, 
+			created_at 
+		FROM trips WHERE 1=1
+	`
 	args := []interface{}{}
 	argID := 1
 
 	if status != "" {
-		query += fmt.Sprintf(" AND status = $%d", argID)
+		query += fmt.Sprintf(" AND status::text = $%d::text", argID)
 		args = append(args, status)
 		argID++
 	}

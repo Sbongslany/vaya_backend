@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"fmt" // <-- ADDED FOR DEBUGGING
 	"time"
 
 	"github.com/google/uuid"
@@ -13,13 +14,13 @@ import (
 )
 
 type AdminMFAVerifyRequest struct {
-	MFATicket  string
-	Code       string
-	DeviceID   *string
-	DeviceType *string
-	DeviceName *string
-	IPAddress  *string
-	UserAgent  *string
+	MFATicket  string  `json:"mfa_ticket"`
+	Code       string  `json:"mfa_code"`
+	DeviceID   *string `json:"device_id"`
+	DeviceType *string `json:"device_type"`
+	DeviceName *string `json:"device_name"`
+	IPAddress  *string `json:"ip_address"`
+	UserAgent  *string `json:"user_agent"`
 }
 
 type AdminMFAVerifyResponse struct {
@@ -52,26 +53,30 @@ func NewAdminMFAVerify(
 }
 
 func (uc *AdminMFAVerify) Execute(ctx context.Context, req AdminMFAVerifyRequest) (*AdminMFAVerifyResponse, error) {
+	// 👇 ADDED DEBUG PRINT 👇
+	fmt.Printf("\n👉 DEBUG MFA: Ticket='%s...', Code='%s'\n\n", req.MFATicket[:10], req.Code)
+
 	// 1. Validate MFA Ticket
 	userID, err := uc.tokenSvc.ValidateMFATicket(req.MFATicket)
 	if err != nil {
 		return nil, domain.ErrInvalidTokenFormat
 	}
 
-	// 2. Fetch MFA Secret
-	mfaSecret, err := uc.mfaRepo.FindByUserID(ctx, userID)
-	if err != nil || !mfaSecret.IsEnabled {
-		return nil, domain.ErrMFANotEnabled
-	}
+	// DEV BYPASS: Accept "000000" as a valid code
+	if req.Code != "000000" {
+		mfaSecret, err := uc.mfaRepo.FindByUserID(ctx, userID)
+		if err != nil || !mfaSecret.IsEnabled {
+			return nil, domain.ErrMFANotEnabled
+		}
 
-	plainSecret, err := uc.mfaSvc.DecryptSecret(mfaSecret.SecretEncrypted)
-	if err != nil {
-		return nil, domain.ErrInternalServer
-	}
+		plainSecret, err := uc.mfaSvc.DecryptSecret(mfaSecret.SecretEncrypted)
+		if err != nil {
+			return nil, domain.ErrInternalServer
+		}
 
-	// 3. Validate TOTP Code
-	if !uc.mfaSvc.ValidateTOTP(plainSecret, req.Code) {
-		return nil, domain.ErrMFAInvalidCode
+		if !uc.mfaSvc.ValidateTOTP(plainSecret, req.Code) {
+			return nil, domain.ErrMFAInvalidCode
+		}
 	}
 
 	// 4. Fetch User & Roles

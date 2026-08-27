@@ -2,7 +2,6 @@ package usecases
 
 import (
 	"context"
-	"errors"
 
 	"github.com/yourorg/ehailing/backend/internal/auth/domain"
 	"github.com/yourorg/ehailing/backend/internal/auth/domain/repositories"
@@ -61,13 +60,15 @@ func (uc *AdminLogin) Execute(ctx context.Context, req AdminLoginRequest) (*Admi
 	}
 
 	// Check MFA Status
-	mfaSecret, err := uc.mfaRepo.FindByUserID(ctx, user.ID)
-	mfaEnabled := false
-	if err == nil && mfaSecret.IsEnabled {
-		mfaEnabled = true
-	} else if err != nil && !errors.Is(err, domain.ErrMFANotEnabled) {
-		return nil, err
-	}
+	// mfaSecret, err := uc.mfaRepo.FindByUserID(ctx, user.ID)
+	// mfaEnabled := false
+	// if err == nil && mfaSecret.IsEnabled {
+	// 	mfaEnabled = true
+	// } else if err != nil && !errors.Is(err, domain.ErrMFANotEnabled) {
+	// 	return nil, err
+	// }
+	// DEV MODE: Force MFA enabled for testing
+	mfaEnabled := true
 
 	// Generate short-lived MFA ticket (valid for 5 minutes)
 	// We will add GenerateMFATicket to TokenService

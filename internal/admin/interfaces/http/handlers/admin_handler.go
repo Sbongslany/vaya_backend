@@ -31,7 +31,7 @@ type AdminHandler struct {
 	processPayoutApprovalUC *usecases.ProcessPayoutApproval
 	rejectPayoutUC          *usecases.RejectPayout
 
-		// Phase 3: Admin Management
+	// Phase 3: Admin Management
 	adminMgmtUCs *usecases.AdminManagementUCs
 }
 
@@ -52,7 +52,6 @@ func NewAdminHandler(
 	processPayoutApprovalUC *usecases.ProcessPayoutApproval,
 	rejectPayoutUC *usecases.RejectPayout,
 	adminMgmtUCs *usecases.AdminManagementUCs, // <-- ADD THIS
-
 
 ) *AdminHandler {
 	return &AdminHandler{
@@ -77,7 +76,11 @@ func NewAdminHandler(
 func (h *AdminHandler) GetPlatformOverview(c *gin.Context) {
 	stats, err := h.getOverviewUC.Execute(c.Request.Context())
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed_to_fetch_stats"})
+		// We added "details" to expose the exact database error
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "failed_to_fetch_stats",
+			"details": err.Error(),
+		})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"stats": stats})
@@ -102,7 +105,11 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 		Limit: limit, Offset: offset, Role: role, Status: status,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed_to_fetch_users"})
+		// We added "details" to expose the exact database error
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "failed_to_fetch_users",
+			"details": err.Error(),
+		})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"users": users})
@@ -144,7 +151,7 @@ func (h *AdminHandler) ListAllTrips(c *gin.Context) {
 		Limit: limit, Offset: offset, Status: status,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed_to_fetch_trips"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed_to_fetch_trips", "details": err.Error()})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"trips": trips})
@@ -335,9 +342,9 @@ func (h *AdminHandler) CreateAdmin(c *gin.Context) {
 
 	// Return the temporary password so the Super Admin can share it securely
 	c.JSON(http.StatusCreated, gin.H{
-		"message": "admin_created_successfully",
+		"message":            "admin_created_successfully",
 		"temporary_password": tempPwd,
-		"instruction": "Share this password securely with the new admin. They should change it on first login.",
+		"instruction":        "Share this password securely with the new admin. They should change it on first login.",
 	})
 }
 
